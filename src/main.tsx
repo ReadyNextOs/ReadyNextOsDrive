@@ -8,3 +8,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+
+// Remove debug loader once React mounts
+const debugEl = document.getElementById('debug-loader');
+if (debugEl) debugEl.remove();
