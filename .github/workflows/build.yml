@@ -108,9 +108,8 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd src-tauri/icons
-          if [ ! -f "32x32.png" ]; then
-            python3 -c "
-          import struct, zlib
+          python3 -c "
+          import struct, zlib, shutil
           def png(w,h):
               def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
               raw=b''
@@ -119,26 +118,39 @@ jobs:
                   for x in range(w):
                       raw+=b'\x19\x76\xd2\xff'
               return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+          def ico(sizes):
+              images=[]
+              for s in sizes:
+                  d=png(s,s)
+                  images.append((s,d))
+              n=len(images)
+              hdr=struct.pack('<HHH',0,1,n)
+              offset=6+n*16
+              entries=b''
+              data=b''
+              for s,d in images:
+                  w=s if s<256 else 0
+                  entries+=struct.pack('<BBBBHHII',w,w,0,0,1,32,len(d),offset)
+                  data+=d
+                  offset+=len(d)
+              return hdr+entries+data
           for s in [32,128,256]:
-              open(f'{s}x{s}.png','wb').write(png(s,s))
-          import shutil
+              p=png(s,s)
+              with open(f'{s}x{s}.png','wb') as f: f.write(p)
           shutil.copy('256x256.png','128x128@2x.png')
+          with open('icon.ico','wb') as f: f.write(ico([32,128,256]))
+          shutil.copy('128x128.png','icon.icns')
+          shutil.copy('32x32.png','tray-icon.png')
+          print('Generated all placeholder icons')
           "
-            echo "Generated placeholder PNG icons"
-          fi
-          [ ! -f "icon.ico" ] && cp 32x32.png icon.ico && echo "Created icon.ico"
-          [ ! -f "icon.icns" ] && cp 128x128.png icon.icns && echo "Created icon.icns"
-          [ ! -f "tray-icon.png" ] && cp 32x32.png tray-icon.png && echo "Created tray-icon.png"
-          true
 
       - name: Generate placeholder icons (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           cd src-tauri/icons
-          if (-not (Test-Path "32x32.png")) {
-            python -c @"
-          import struct, zlib
+          python -c @"
+          import struct, zlib, shutil
           def png(w,h):
               def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
               raw=b''
@@ -147,16 +159,31 @@ jobs:
                   for x in range(w):
                       raw+=b'\x19\x76\xd2\xff'
               return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+          def ico(sizes):
+              images=[]
+              for s in sizes:
+                  d=png(s,s)
+                  images.append((s,d))
+              n=len(images)
+              hdr=struct.pack('<HHH',0,1,n)
+              offset=6+n*16
+              entries=b''
+              data=b''
+              for s,d in images:
+                  w=s if s<256 else 0
+                  entries+=struct.pack('<BBBBHHII',w,w,0,0,1,32,len(d),offset)
+                  data+=d
+                  offset+=len(d)
+              return hdr+entries+data
           for s in [32,128,256]:
-              open(f'{s}x{s}.png','wb').write(png(s,s))
-          import shutil
+              p=png(s,s)
+              with open(f'{s}x{s}.png','wb') as f: f.write(p)
           shutil.copy('256x256.png','128x128@2x.png')
+          with open('icon.ico','wb') as f: f.write(ico([32,128,256]))
+          shutil.copy('128x128.png','icon.icns')
+          shutil.copy('32x32.png','tray-icon.png')
+          print('Generated all placeholder icons')
           "@
-            Write-Host "Generated placeholder PNG icons"
-          }
-          if (-not (Test-Path "icon.ico")) { Copy-Item 32x32.png icon.ico }
-          if (-not (Test-Path "icon.icns")) { Copy-Item 128x128.png icon.icns }
-          if (-not (Test-Path "tray-icon.png")) { Copy-Item 32x32.png tray-icon.png }
 
       # --- Install frontend deps ---
       - name: Install frontend dependencies

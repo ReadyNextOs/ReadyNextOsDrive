@@ -37,6 +37,9 @@ async fn login(
     };
     auth::store_token(&email, &token)?;
 
+    // Serialize user before moving fields
+    let user_json = serde_json::to_string(&response.user).unwrap();
+
     // Update config
     {
         let mut config = state.config.lock().unwrap();
@@ -45,7 +48,7 @@ async fn login(
         config.tenant_id = response.user.tenant_id;
     }
 
-    Ok(serde_json::to_string(&response.user).unwrap())
+    Ok(user_json)
 }
 
 /// Logout and remove stored credentials
