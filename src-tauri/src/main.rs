@@ -171,7 +171,7 @@ fn main() {
                     window.with_webview(|webview| {
                         use webkit2gtk::WebViewExt;
                         use webkit2gtk::SettingsExt;
-                        if let Some(settings) = WebViewExt::settings(webview.inner()) {
+                        if let Some(settings) = WebViewExt::settings(&webview.inner()) {
                             SettingsExt::set_hardware_acceleration_policy(
                                 &settings,
                                 webkit2gtk::HardwareAccelerationPolicy::Never,
