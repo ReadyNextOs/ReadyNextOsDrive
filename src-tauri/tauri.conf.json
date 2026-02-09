@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/tauri-schema/main/v2/tauri.conf.json",
   "productName": "ReadyNextOs Drive",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.readynextos.drive",
   "build": {
     "frontendDist": "../dist",
