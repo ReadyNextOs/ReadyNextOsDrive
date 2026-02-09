@@ -185,6 +185,29 @@ jobs:
           print('Generated all placeholder icons')
           "@
 
+      # --- Pre-download AppImage tools with retry (GitHub CDN can be flaky) ---
+      - name: Pre-download linuxdeploy tools
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          TOOLS_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+          mkdir -p "$TOOLS_DIR"
+          for tool in \
+            "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64" \
+            "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"; do
+            FILENAME=$(basename "$tool")
+            echo "Downloading $FILENAME..."
+            for attempt in 1 2 3 4 5; do
+              if curl -fsSL --retry 3 --retry-delay 5 -o "$TOOLS_DIR/$FILENAME" "$tool"; then
+                echo "  ✓ Downloaded $FILENAME (attempt $attempt)"
+                chmod +x "$TOOLS_DIR/$FILENAME"
+                break
+              fi
+              echo "  ✗ Attempt $attempt failed, waiting 15s..."
+              sleep 15
+            done
+          done
+          ls -la "$TOOLS_DIR/"
+
       # --- Install frontend deps ---
       - name: Install frontend dependencies
         run: npm install
