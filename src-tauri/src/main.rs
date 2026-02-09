@@ -8,6 +8,8 @@ mod watcher;
 
 use config::{ActivityEntry, AppConfig, SyncStatus};
 use std::sync::{Arc, Mutex};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{Manager, State};
 
 /// Shared application state
@@ -117,10 +119,14 @@ fn open_folder(path: String) -> Result<(), String> {
 // ==================== Main ====================
 
 fn main() {
-    // Fix EGL crashes on Linux (Wayland + Intel/Mesa)
+    // Fix EGL crashes on Linux (Wayland + Intel/Mesa + WebKitGTK 2.44+)
+    // WEBKIT_DISABLE_COMPOSITING_MODE prevents EGL initialization entirely
     // Must be set before any GTK/WebKit initialization
     #[cfg(target_os = "linux")]
     {
+        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        }
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
@@ -158,6 +164,48 @@ fn main() {
             open_folder,
         ])
         .setup(|app| {
+            // Setup tray icon menu and events
+            let show_item = MenuItem::with_id(app, "show", "Pokaż okno", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Zakończ", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            if let Some(tray) = app.tray_by_id("main-tray") {
+                tray.set_menu(Some(menu))?;
+                tray.set_show_menu_on_left_click(false)?;
+
+                // Left click: show/focus window
+                tray.on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                });
+
+                // Menu events
+                tray.on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                });
+            }
+
             // Hide main window on startup (tray-only mode)
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
