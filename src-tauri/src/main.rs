@@ -119,14 +119,11 @@ fn open_folder(path: String) -> Result<(), String> {
 // ==================== Main ====================
 
 fn main() {
-    // Fix EGL crashes on Linux (Wayland + Intel/Mesa + WebKitGTK 2.44+)
-    // WEBKIT_DISABLE_COMPOSITING_MODE prevents EGL initialization entirely
-    // Must be set before any GTK/WebKit initialization
+    // Workaround for WebKitGTK EGL issues on some Linux systems
+    // WEBKIT_DISABLE_DMABUF_RENDERER helps on Wayland + NVIDIA
+    // For Intel Iris Xe + WebKitGTK 2.46+, downgrade to webkit2gtk-4.1 2.44.x
     #[cfg(target_os = "linux")]
     {
-        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        }
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
