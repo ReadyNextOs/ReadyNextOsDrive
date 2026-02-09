@@ -119,11 +119,14 @@ fn open_folder(path: String) -> Result<(), String> {
 // ==================== Main ====================
 
 fn main() {
-    // Workaround for WebKitGTK EGL issues on some Linux systems
-    // WEBKIT_DISABLE_DMABUF_RENDERER helps on Wayland + NVIDIA
-    // For Intel Iris Xe + WebKitGTK 2.46+, downgrade to webkit2gtk-4.1 2.44.x
+    // Workaround for WebKitGTK EGL crashes on Linux (Intel Iris Xe + Wayland)
+    // Step 1: COMPOSITING_MODE=1 prevents EGL init crash during webview creation
+    // Step 2: In setup(), we set HardwareAccelerationPolicy::Never and reload
     #[cfg(target_os = "linux")]
     {
+        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        }
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
@@ -161,6 +164,27 @@ fn main() {
             open_folder,
         ])
         .setup(|app| {
+            // On Linux: disable hardware acceleration and reload to fix EGL blank page
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.with_webview(|webview| {
+                        use webkit2gtk::prelude::*;
+                        if let Some(settings) = webview.inner().settings() {
+                            settings.set_hardware_acceleration_policy(
+                                webkit2gtk::HardwareAccelerationPolicy::Never,
+                            );
+                        }
+                    }).ok();
+
+                    // Remove COMPOSITING_MODE so new subprocesses render normally
+                    std::env::remove_var("WEBKIT_DISABLE_COMPOSITING_MODE");
+
+                    // Reload page — new subprocess uses software rendering (no EGL)
+                    let _ = window.eval("setTimeout(() => window.location.reload(), 100)");
+                }
+            }
+
             // Setup tray icon menu and events
             let show_item = MenuItem::with_id(app, "show", "Pokaż okno", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Zakończ", true, None::<&str>)?;
