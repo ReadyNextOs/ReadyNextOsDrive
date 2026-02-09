@@ -117,6 +117,15 @@ fn open_folder(path: String) -> Result<(), String> {
 // ==================== Main ====================
 
 fn main() {
+    // Fix EGL crashes on Linux (Wayland + Intel/Mesa)
+    // Must be set before any GTK/WebKit initialization
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     env_logger::init();
 
     // Determine rclone sidecar path
