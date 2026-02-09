@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tauri::AppHandle;
+use tauri_plugin_store::StoreExt;
 
 /// Application configuration stored in the Tauri store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,4 +93,29 @@ pub struct ActivityEntry {
     pub file_path: String,
     pub status: String,
     pub details: Option<String>,
+}
+
+const STORE_FILE: &str = "config.json";
+const STORE_KEY: &str = "app_config";
+
+/// Load config from tauri-plugin-store (persisted across restarts).
+pub fn load_config(app: &AppHandle) -> Option<AppConfig> {
+    let store = app.store(STORE_FILE).ok()?;
+    let value = store.get(STORE_KEY)?;
+    serde_json::from_value(value).ok()
+}
+
+/// Save config to tauri-plugin-store.
+pub fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let value = serde_json::to_value(config).map_err(|e| e.to_string())?;
+    store.set(STORE_KEY.to_string(), value);
+    store.save().map_err(|e| e.to_string())
+}
+
+/// Clear config from tauri-plugin-store (e.g. on logout).
+pub fn clear_config(app: &AppHandle) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let _ = store.delete(STORE_KEY);
+    store.save().map_err(|e| e.to_string())
 }

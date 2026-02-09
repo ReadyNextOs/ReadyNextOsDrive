@@ -7,7 +7,7 @@ export default function ActivityPage() {
   const refresh = useCallback(async () => {
     try {
       const data = await getActivity(100);
-      setEntries(data.reverse());
+      setEntries([...data].reverse());
     } catch (err) {
       console.error('Failed to load activity:', err);
     }

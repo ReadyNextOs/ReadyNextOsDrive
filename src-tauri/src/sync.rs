@@ -1,26 +1,30 @@
 use crate::config::{ActivityEntry, AppConfig, SyncStatus};
 use std::path::Path;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
+use tauri::AppHandle;
+use tauri_plugin_shell::ShellExt;
 
 /// Sync engine that wraps rclone bisync for bidirectional synchronization.
 pub struct SyncEngine {
     pub status: Arc<Mutex<SyncStatus>>,
     pub activity_log: Arc<Mutex<Vec<ActivityEntry>>>,
-    rclone_path: String,
 }
 
 impl SyncEngine {
-    pub fn new(rclone_path: String) -> Self {
+    pub fn new() -> Self {
         Self {
             status: Arc::new(Mutex::new(SyncStatus::NotConfigured)),
             activity_log: Arc::new(Mutex::new(Vec::new())),
-            rclone_path,
         }
     }
 
     /// Run a full bidirectional sync for both personal and shared files.
-    pub fn sync_all(&self, config: &AppConfig, token: &str) -> Result<(), String> {
+    pub async fn sync_all(
+        &self,
+        app: &AppHandle,
+        config: &AppConfig,
+        token: &str,
+    ) -> Result<(), String> {
         if !config.is_configured() {
             return Err("Not configured".to_string());
         }
@@ -33,13 +37,19 @@ impl SyncEngine {
         std::fs::create_dir_all(&config.shared_sync_path)
             .map_err(|e| format!("Cannot create shared dir: {}", e))?;
 
+        // Obscure the token for rclone
+        let obscured_token = self.obscure_password(app, token).await?;
+
         // Sync personal files
-        let personal_result = self.run_bisync(
-            &config.personal_webdav_url(),
-            &config.personal_sync_path.to_string_lossy(),
-            &config.user_email,
-            token,
-        );
+        let personal_result = self
+            .run_bisync(
+                app,
+                &config.personal_webdav_url(),
+                &config.personal_sync_path.to_string_lossy(),
+                &config.user_email,
+                &obscured_token,
+            )
+            .await;
 
         if let Err(ref e) = personal_result {
             self.log_activity("sync_personal", "", "error", Some(e.clone()));
@@ -48,12 +58,15 @@ impl SyncEngine {
         }
 
         // Sync shared files
-        let shared_result = self.run_bisync(
-            &config.shared_webdav_url(),
-            &config.shared_sync_path.to_string_lossy(),
-            &config.user_email,
-            token,
-        );
+        let shared_result = self
+            .run_bisync(
+                app,
+                &config.shared_webdav_url(),
+                &config.shared_sync_path.to_string_lossy(),
+                &config.user_email,
+                &obscured_token,
+            )
+            .await;
 
         if let Err(ref e) = shared_result {
             self.log_activity("sync_shared", "", "error", Some(e.clone()));
@@ -79,41 +92,47 @@ impl SyncEngine {
     }
 
     /// Run rclone bisync between a WebDAV remote and a local directory.
-    fn run_bisync(
+    /// Auth credentials are passed via environment variables (not visible in /proc/pid/cmdline).
+    async fn run_bisync(
         &self,
+        app: &AppHandle,
         webdav_url: &str,
         local_path: &str,
         username: &str,
-        token: &str,
+        obscured_token: &str,
     ) -> Result<(), String> {
-        // First, ensure resync is done (required for first bisync)
+        // Check if this is the first sync run
         let first_run_marker = Path::new(local_path).join(".readynextos-sync-init");
         let is_first_run = !first_run_marker.exists();
 
         let mut args = vec![
-            "bisync".to_string(),
-            ":webdav:".to_string(),
-            local_path.to_string(),
-            format!("--webdav-url={}", webdav_url),
-            format!("--webdav-user={}", username),
-            format!("--webdav-pass={}", self.obscure_password(token)?),
-            "--create-empty-src-dirs".to_string(),
-            "--resilient".to_string(),
-            "--conflict-resolve=newer".to_string(),
-            "--verbose".to_string(),
+            "bisync",
+            ":webdav:",
+            local_path,
+            "--create-empty-src-dirs",
+            "--resilient",
+            "--conflict-resolve=newer",
+            "--verbose",
         ];
 
         if is_first_run {
-            args.push("--resync".to_string());
+            args.push("--resync");
         } else {
-            args.push("--recover".to_string());
+            args.push("--recover");
         }
 
         log::info!("Running rclone bisync for {}", webdav_url);
 
-        let output = Command::new(&self.rclone_path)
+        let output = app
+            .shell()
+            .sidecar("sidecars/rclone")
+            .map_err(|e| format!("Failed to create rclone sidecar: {}", e))?
             .args(&args)
+            .env("RCLONE_WEBDAV_URL", webdav_url)
+            .env("RCLONE_WEBDAV_USER", username)
+            .env("RCLONE_WEBDAV_PASS", obscured_token)
             .output()
+            .await
             .map_err(|e| format!("Failed to run rclone: {}", e))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -147,10 +166,14 @@ impl SyncEngine {
     }
 
     /// Obscure a password for rclone (rclone uses its own obscure format).
-    fn obscure_password(&self, password: &str) -> Result<String, String> {
-        let output = Command::new(&self.rclone_path)
+    async fn obscure_password(&self, app: &AppHandle, password: &str) -> Result<String, String> {
+        let output = app
+            .shell()
+            .sidecar("sidecars/rclone")
+            .map_err(|e| format!("Failed to create rclone sidecar: {}", e))?
             .args(["obscure", password])
             .output()
+            .await
             .map_err(|e| format!("Failed to obscure password: {}", e))?;
 
         if output.status.success() {

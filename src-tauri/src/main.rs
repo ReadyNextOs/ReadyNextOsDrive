@@ -24,6 +24,7 @@ struct AppState {
 /// Login with email and password
 #[tauri::command]
 async fn login(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     server_url: String,
     email: String,
@@ -42,12 +43,13 @@ async fn login(
     // Serialize user before moving fields
     let user_json = serde_json::to_string(&response.user).unwrap();
 
-    // Update config
+    // Update config and persist
     {
-        let mut config = state.config.lock().unwrap();
-        config.server_url = server_url;
-        config.user_email = email;
-        config.tenant_id = response.user.tenant_id;
+        let mut cfg = state.config.lock().unwrap();
+        cfg.server_url = server_url;
+        cfg.user_email = email;
+        cfg.tenant_id = response.user.tenant_id;
+        config::save_config(&app, &cfg)?;
     }
 
     Ok(user_json)
@@ -55,7 +57,7 @@ async fn login(
 
 /// Logout and remove stored credentials
 #[tauri::command]
-fn logout(state: State<'_, AppState>) -> Result<(), String> {
+fn logout(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let email = state.config.lock().unwrap().user_email.clone();
     if !email.is_empty() {
         auth::remove_token(&email)?;
@@ -67,6 +69,9 @@ fn logout(state: State<'_, AppState>) -> Result<(), String> {
     // Reset config
     *state.config.lock().unwrap() = AppConfig::default();
     *state.sync_engine.status.lock().unwrap() = SyncStatus::NotConfigured;
+
+    // Clear persisted config
+    config::clear_config(&app)?;
 
     Ok(())
 }
@@ -85,21 +90,27 @@ fn get_config(state: State<'_, AppState>) -> AppConfig {
 
 /// Update configuration
 #[tauri::command]
-fn update_config(state: State<'_, AppState>, config: AppConfig) -> Result<(), String> {
+fn update_config(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    config: AppConfig,
+) -> Result<(), String> {
+    config::save_config(&app, &config)?;
     *state.config.lock().unwrap() = config;
     Ok(())
 }
 
 /// Trigger manual sync
 #[tauri::command]
-async fn trigger_sync(state: State<'_, AppState>) -> Result<(), String> {
-    let config = state.config.lock().unwrap().clone();
-    let email = config.user_email.clone();
+async fn trigger_sync(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let cfg = state.config.lock().unwrap().clone();
+    let email = cfg.user_email.clone();
 
     let token = auth::get_token(&email)?
         .ok_or_else(|| "Not logged in".to_string())?;
 
-    state.sync_engine.sync_all(&config, &token.token)?;
+    let engine = state.sync_engine.clone();
+    engine.sync_all(&app, &cfg, &token.token).await?;
 
     Ok(())
 }
@@ -134,10 +145,7 @@ fn main() {
 
     env_logger::init();
 
-    // Determine rclone sidecar path
-    let rclone_path = "rclone".to_string(); // Will be resolved as sidecar
-
-    let sync_engine = Arc::new(sync::SyncEngine::new(rclone_path));
+    let sync_engine = Arc::new(sync::SyncEngine::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -164,6 +172,12 @@ fn main() {
             open_folder,
         ])
         .setup(|app| {
+            // Load persisted config from store
+            if let Some(saved_config) = config::load_config(app.handle()) {
+                let state = app.state::<AppState>();
+                *state.config.lock().unwrap() = saved_config;
+            }
+
             // On Linux: disable hardware acceleration and reload to fix EGL blank page
             #[cfg(target_os = "linux")]
             {
