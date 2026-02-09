@@ -174,7 +174,8 @@ impl SyncEngine {
 
         // Keep only last 1000 entries
         if log.len() > 1000 {
-            log.drain(0..log.len() - 1000);
+            let excess = log.len() - 1000;
+            log.drain(0..excess);
         }
     }
 

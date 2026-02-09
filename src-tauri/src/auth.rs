@@ -71,7 +71,7 @@ pub struct LoginResponse {
     pub user: LoginUser,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LoginUser {
     pub id: String,
     pub email: String,
