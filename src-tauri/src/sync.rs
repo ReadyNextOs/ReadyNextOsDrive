@@ -92,7 +92,7 @@ impl SyncEngine {
 
         let mut args = vec![
             "bisync".to_string(),
-            format!(":webdav:{{}}", ""),
+            ":webdav:".to_string(),
             local_path.to_string(),
             format!("--webdav-url={}", webdav_url),
             format!("--webdav-user={}", username),
