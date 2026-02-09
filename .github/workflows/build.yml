@@ -33,24 +33,28 @@ jobs:
             rclone_arch: amd64
             rclone_ext: ''
             sidecar_suffix: '-x86_64-unknown-linux-gnu'
+            bundles: 'deb,rpm'
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             rclone_os: windows
             rclone_arch: amd64
             rclone_ext: '.exe'
             sidecar_suffix: '-x86_64-pc-windows-msvc.exe'
+            bundles: 'msi'
           - platform: macos-latest
             target: aarch64-apple-darwin
             rclone_os: osx
             rclone_arch: arm64
             rclone_ext: ''
             sidecar_suffix: '-aarch64-apple-darwin'
+            bundles: 'dmg'
           - platform: macos-latest
             target: x86_64-apple-darwin
             rclone_os: osx
             rclone_arch: amd64
             rclone_ext: ''
             sidecar_suffix: '-x86_64-apple-darwin'
+            bundles: 'dmg'
 
     runs-on: ${{ matrix.platform }}
 
@@ -185,29 +189,6 @@ jobs:
           print('Generated all placeholder icons')
           "@
 
-      # --- Pre-download AppImage tools with retry (GitHub CDN can be flaky) ---
-      - name: Pre-download linuxdeploy tools
-        if: startsWith(matrix.platform, 'ubuntu')
-        run: |
-          TOOLS_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
-          mkdir -p "$TOOLS_DIR"
-          for tool in \
-            "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64" \
-            "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"; do
-            FILENAME=$(basename "$tool")
-            echo "Downloading $FILENAME..."
-            for attempt in 1 2 3 4 5; do
-              if curl -fsSL --retry 3 --retry-delay 5 -o "$TOOLS_DIR/$FILENAME" "$tool"; then
-                echo "  ✓ Downloaded $FILENAME (attempt $attempt)"
-                chmod +x "$TOOLS_DIR/$FILENAME"
-                break
-              fi
-              echo "  ✗ Attempt $attempt failed, waiting 15s..."
-              sleep 15
-            done
-          done
-          ls -la "$TOOLS_DIR/"
-
       # --- Install frontend deps ---
       - name: Install frontend dependencies
         run: npm install
@@ -218,7 +199,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           tagName: v__VERSION__
           releaseName: 'ReadyNextOs Drive v__VERSION__'
           releaseBody: |
