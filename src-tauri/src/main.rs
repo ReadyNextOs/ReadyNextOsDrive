@@ -169,9 +169,11 @@ fn main() {
             {
                 if let Some(window) = app.get_webview_window("main") {
                     window.with_webview(|webview| {
-                        use webkit2gtk::prelude::*;
-                        if let Some(settings) = webview.inner().settings() {
-                            settings.set_hardware_acceleration_policy(
+                        use webkit2gtk::WebViewExt;
+                        use webkit2gtk::SettingsExt;
+                        if let Some(settings) = WebViewExt::settings(webview.inner()) {
+                            SettingsExt::set_hardware_acceleration_policy(
+                                &settings,
                                 webkit2gtk::HardwareAccelerationPolicy::Never,
                             );
                         }
