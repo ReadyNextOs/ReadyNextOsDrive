@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Shared application state
 struct AppState {
@@ -411,7 +411,7 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
         .file()
         .set_title("Wybierz folder synchronizacji")
         .blocking_pick_folder();
-    Ok(folder.map(|f| f.to_string_lossy().to_string()))
+    Ok(folder.map(|f| f.to_string()))
 }
 
 /// Update the tray icon based on current sync status
