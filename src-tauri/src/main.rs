@@ -477,13 +477,17 @@ fn get_log_contents(state: State<'_, AppState>, max_lines: Option<usize>) -> Res
 #[tauri::command]
 async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let folder = app
-        .dialog()
-        .file()
-        .set_title("Wybierz folder synchronizacji")
-        .pick_folder()
-        .await;
-    Ok(folder.map(|f| f.to_string()))
+    let handle = app.clone();
+    tokio::task::spawn_blocking(move || {
+        let folder = handle
+            .dialog()
+            .file()
+            .set_title("Wybierz folder synchronizacji")
+            .blocking_pick_folder();
+        Ok(folder.map(|f| f.to_string()))
+    })
+    .await
+    .map_err(|e| format!("Dialog task failed: {}", e))?
 }
 
 /// Update the tray icon based on current sync status
