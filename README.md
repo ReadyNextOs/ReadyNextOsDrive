@@ -1,42 +1,25 @@
 # ReadyNextOs Drive
 
-Desktop file synchronization client for ReadyNextOs. Built with [Tauri v2](https://v2.tauri.app/) + React + TypeScript.
+Repozytorium aplikacji desktopowej ReadyNextOs Drive opartej o Tauri, React i TypeScript.
 
-Uses [rclone](https://rclone.org/) as a sidecar for WebDAV-based file sync with the ReadyNextOs backend.
+## Dokumentacja
 
-## Development
+Cała dokumentacja projektowa znajduje się w katalogu `docs/`.
 
-### Prerequisites
+### Architektura
 
-- [Node.js 22+](https://nodejs.org/)
-- [Rust](https://rustup.rs/)
-- System dependencies (Linux): `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+- [Logowanie Desktop Tokenem](./docs/architecture/AUTH_TOKEN_FLOW.md)
 
-### Setup
+### Projekt
 
-```bash
-npm install
-npm run tauri dev
-```
+- [Claude / Kontekst projektu](./docs/project/CLAUDE.md)
 
-### Build
+### Reviews
 
-```bash
-npm run tauri build
-```
+- [Review techniczny](./docs/reviews/REVIEW.md)
+- [UX Review](./docs/reviews/UX-REVIEW.md)
 
-## Downloads
+## Kod aplikacji
 
-Pre-built installers are available from [GitHub Releases](../../releases):
-
-| Platform | Format |
-|----------|--------|
-| Windows | `.msi` |
-| macOS (ARM) | `.dmg` |
-| macOS (Intel) | `.dmg` |
-| Linux (Debian/Ubuntu) | `.deb` |
-| Linux (universal) | `.AppImage` |
-
-## License
-
-Proprietary - ReadyNextOs
+- `src/` - frontend React
+- `src-tauri/` - backend desktopowy Tauri / Rust
