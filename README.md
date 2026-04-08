@@ -9,6 +9,7 @@ Cała dokumentacja projektowa znajduje się w katalogu `docs/`.
 ### Architektura
 
 - [Logowanie Desktop Tokenem](./docs/architecture/AUTH_TOKEN_FLOW.md)
+- [Build CI/CD i ikony](./docs/architecture/BUILD_AND_ICONS.md)
 
 ### Projekt
 
