@@ -21,11 +21,10 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 notify = "6"
-keyring = "3"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 dirs = "5"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
-env_logger = "0.11"
 simplelog = "0.12"
 open = "5"
 base64 = "0.22"

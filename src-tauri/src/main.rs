@@ -106,6 +106,12 @@ fn validate_sync_path(path: &Path) -> AppResult<()> {
         return Err(AppError::config("Nie można użyć katalogu głównego jako ścieżki synchronizacji"));
     }
 
+    // Block Windows drive roots (C:\, D:\, etc.)
+    #[cfg(target_os = "windows")]
+    if path.parent().is_none() || path.as_os_str().len() <= 3 {
+        return Err(AppError::config("Nie można użyć katalogu głównego dysku jako ścieżki synchronizacji"));
+    }
+
     Ok(())
 }
 
@@ -306,11 +312,17 @@ fn persist_login(
     };
     auth::store_token(&email, &token)?;
 
-    // Verify token was stored
+    // Verify token was stored — fail login if keychain didn't persist
     match auth::get_token(&email) {
         Ok(Some(_)) => log::info!("persist_login: token verification OK"),
-        Ok(None) => log::error!("persist_login: token verification FAILED - not found after store!"),
-        Err(e) => log::error!("persist_login: token verification FAILED - {}", e),
+        Ok(None) => {
+            log::error!("persist_login: token verification FAILED - not found after store!");
+            return Err(AppError::auth("Nie udało się zapisać tokenu w systemie. Sprawdź uprawnienia do Windows Credential Manager."));
+        }
+        Err(e) => {
+            log::error!("persist_login: token verification FAILED - {}", e);
+            return Err(AppError::auth(format!("Weryfikacja tokenu nie powiodła się: {}", e)));
+        }
     }
 
     let user_json = serde_json::to_string(&user)
@@ -441,13 +453,22 @@ fn set_debug_mode(state: State<'_, AppState>, enabled: bool) -> Result<(), Strin
     Ok(())
 }
 
-/// Read log file contents (last N lines)
+/// Read log file contents (last N lines, reads only tail of file)
 #[tauri::command]
 fn get_log_contents(state: State<'_, AppState>, max_lines: Option<usize>) -> Result<String, String> {
-    let content = std::fs::read_to_string(&state.log_path)
-        .map_err(|e| format!("Nie udało się odczytać logów: {}", e))?;
+    use std::io::{Read, Seek, SeekFrom};
     let limit = max_lines.unwrap_or(200);
-    let lines: Vec<&str> = content.lines().collect();
+    let mut file = std::fs::File::open(&state.log_path)
+        .map_err(|e| format!("Nie udało się odczytać logów: {}", e))?;
+    let file_len = file.metadata().map(|m| m.len()).unwrap_or(0);
+    // Read at most 256KB from the end
+    let read_from = file_len.saturating_sub(256 * 1024);
+    file.seek(SeekFrom::Start(read_from))
+        .map_err(|e| format!("Seek error: {}", e))?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)
+        .map_err(|e| format!("Read error: {}", e))?;
+    let lines: Vec<&str> = buf.lines().collect();
     let start = if lines.len() > limit { lines.len() - limit } else { 0 };
     Ok(lines[start..].join("\n"))
 }
@@ -460,7 +481,8 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
         .dialog()
         .file()
         .set_title("Wybierz folder synchronizacji")
-        .blocking_pick_folder();
+        .pick_folder()
+        .await;
     Ok(folder.map(|f| f.to_string()))
 }
 
@@ -584,6 +606,7 @@ fn main() {
     // Workaround for WebKitGTK EGL crashes on Linux (Intel Iris Xe + Wayland)
     // Step 1: COMPOSITING_MODE=1 prevents EGL init crash during webview creation
     // Step 2: In setup(), we set HardwareAccelerationPolicy::Never and reload
+    // SAFETY: env vars set before any threads are spawned (single-threaded at this point)
     #[cfg(target_os = "linux")]
     {
         if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
@@ -592,6 +615,9 @@ fn main() {
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+        // Remove immediately — WebKit reads env on process start, subprocesses
+        // spawned later (rclone) should not inherit these.
+        std::env::remove_var("WEBKIT_DISABLE_COMPOSITING_MODE");
     }
 
     // Setup log file in app data directory
@@ -687,9 +713,6 @@ fn main() {
                             );
                         }
                     }).ok();
-
-                    // Remove COMPOSITING_MODE so new subprocesses render normally
-                    std::env::remove_var("WEBKIT_DISABLE_COMPOSITING_MODE");
 
                     // Reload page — new subprocess uses software rendering (no EGL)
                     let _ = window.eval("setTimeout(() => window.location.reload(), 100)");

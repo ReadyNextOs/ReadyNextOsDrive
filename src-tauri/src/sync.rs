@@ -33,19 +33,18 @@ impl SyncEngine {
         }
 
         {
-            let status = self.status_guard();
+            let mut status = self.status_guard();
             if *status == SyncStatus::Syncing {
                 return Err(AppError::sync("Synchronizacja już w toku"));
             }
+            *status = SyncStatus::Syncing;
         }
 
-        self.set_status(SyncStatus::Syncing);
-
-        // Ensure local directories exist
-        std::fs::create_dir_all(&config.personal_sync_path).map_err(|e| {
+        // Ensure local directories exist (async to avoid blocking the runtime)
+        tokio::fs::create_dir_all(&config.personal_sync_path).await.map_err(|e| {
             self.set_error_status(format!("Cannot create personal dir: {}", e))
         })?;
-        std::fs::create_dir_all(&config.shared_sync_path).map_err(|e| {
+        tokio::fs::create_dir_all(&config.shared_sync_path).await.map_err(|e| {
             self.set_error_status(format!("Cannot create shared dir: {}", e))
         })?;
 
