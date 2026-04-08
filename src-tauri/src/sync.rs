@@ -223,6 +223,7 @@ impl SyncEngine {
                     exit_code = payload.code;
                     break;
                 }
+                _ => {}
             }
         }
 
