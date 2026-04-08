@@ -1,6 +1,6 @@
 [package]
 name = "veloryn-cloudfile"
-version = "0.2.0"
+version = "0.3.0"
 description = "Veloryn CloudFile - Desktop sync client"
 authors = ["Veloryn"]
 edition = "2021"
