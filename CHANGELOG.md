@@ -2,6 +2,21 @@
 
 Wszystkie istotne zmiany w projekcie Veloryn CloudFile.
 
+## [0.4.0] - 2026-04-08
+
+### Dodane
+- Tryb debug z logowaniem do pliku (Ustawienia > Diagnostyka)
+- Podgląd logów bezpośrednio w aplikacji
+- Wyświetlanie błędów synchronizacji w UI (zamiast połykania w console.error)
+
+### Naprawione
+- Status "Nie skonfigurowano" po zalogowaniu — teraz poprawnie ustawia się na "Zsynchronizowane"
+- Status przy starcie aplikacji z zapisaną konfiguracją
+
+### Zmienione
+- Kompaktowy layout strony Ustawienia — mieści się na ekranie bez przewijania
+- Przyciski "Zapisz" i "Wyloguj" w jednym rzędzie
+
 ## [0.3.1] - 2026-04-08
 
 ### Naprawione

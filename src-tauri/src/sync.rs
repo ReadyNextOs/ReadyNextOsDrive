@@ -281,6 +281,10 @@ impl SyncEngine {
         self.set_status(SyncStatus::NotConfigured);
     }
 
+    pub fn set_idle(&self) {
+        self.set_status(SyncStatus::Idle);
+    }
+
     fn set_error_status(&self, error: String) -> AppError {
         self.set_status(SyncStatus::Error(error.clone()));
         AppError::sync(error)

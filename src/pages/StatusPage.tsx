@@ -5,6 +5,7 @@ export default function StatusPage() {
   const [status, setStatus] = useState<SyncStatus>('NotConfigured');
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
@@ -60,10 +61,12 @@ export default function StatusPage() {
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
+    setSyncError(null);
     try {
       await triggerSync();
     } catch (err) {
-      console.error('Sync failed:', err);
+      const msg = String(err).replace(/^(Error|invoke error|Tauri error):\s*/gi, '').trim();
+      setSyncError(msg || 'Synchronizacja nie powiodła się');
     } finally {
       setSyncing(false);
       refreshStatus();
@@ -103,6 +106,10 @@ export default function StatusPage() {
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
             {config.user_email} &middot; {config.server_url}
           </p>
+        )}
+
+        {syncError && (
+          <p className="error-detail" style={{ marginBottom: 8 }}>{syncError}</p>
         )}
 
         <button

@@ -75,3 +75,15 @@ export async function openFolder(path: string): Promise<void> {
 export async function pickFolder(): Promise<string | null> {
   return invoke<string | null>('pick_folder');
 }
+
+export async function getDebugInfo(): Promise<[boolean, string]> {
+  return invoke<[boolean, string]>('get_debug_info');
+}
+
+export async function setDebugMode(enabled: boolean): Promise<void> {
+  await invoke('set_debug_mode', { enabled });
+}
+
+export async function getLogContents(maxLines?: number): Promise<string> {
+  return invoke<string>('get_log_contents', { maxLines: maxLines ?? 200 });
+}

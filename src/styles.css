@@ -263,3 +263,42 @@ body {
   border-top: 1px solid #e0e0e0;
   margin: 16px 0;
 }
+
+/* Compact settings layout */
+.settings-compact .card {
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.settings-compact .input-group {
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.input-sm {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+
+.path-row {
+  display: flex;
+  gap: 6px;
+}

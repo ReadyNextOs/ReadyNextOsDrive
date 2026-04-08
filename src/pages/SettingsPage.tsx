@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react';
-import { getConfig, updateConfig, logout, pickFolder, type AppConfig } from '@/lib/tauri';
+import { getConfig, updateConfig, logout, pickFolder, getDebugInfo, setDebugMode, getLogContents, type AppConfig } from '@/lib/tauri';
 
 interface SettingsPageProps {
   onLogout: () => void;
@@ -10,6 +10,9 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [debugEnabled, setDebugEnabled] = useState(false);
+  const [logPath, setLogPath] = useState('');
+  const [logContents, setLogContents] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +29,15 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
           setLoadError(`Nie udało się wczytać ustawień: ${err}`);
         }
       });
+
+    getDebugInfo()
+      .then(([enabled, path]) => {
+        if (!cancelled) {
+          setDebugEnabled(enabled);
+          setLogPath(path);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -81,17 +93,17 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
   }
 
   return (
-    <div className="container">
+    <div className="container settings-compact">
       <form onSubmit={handleSave}>
         <div className="card">
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Synchronizacja</h3>
+          <h3 className="card-title">Synchronizacja</h3>
 
           <div className="input-group">
-            <label htmlFor="interval">Interwał synchronizacji (sekundy)</label>
+            <label htmlFor="interval">Interwał (sekundy)</label>
             <input
               id="interval"
               type="number"
-              className="input"
+              className="input input-sm"
               min={30}
               max={3600}
               value={config.sync_interval_secs}
@@ -107,115 +119,148 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
             />
           </div>
 
-          <div className="input-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={config.watch_local_changes}
-                onChange={(e) => setConfig({ ...config, watch_local_changes: e.target.checked })}
-                style={{ marginRight: 6 }}
-              />
-              Synchronizuj natychmiast po zmianie pliku
-            </label>
-          </div>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={config.watch_local_changes}
+              onChange={(e) => setConfig({ ...config, watch_local_changes: e.target.checked })}
+            />
+            Synchronizuj po zmianie pliku
+          </label>
 
-          <div className="input-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={config.sync_on_startup}
-                onChange={(e) => setConfig({ ...config, sync_on_startup: e.target.checked })}
-                style={{ marginRight: 6 }}
-              />
-              Synchronizuj przy uruchomieniu
-            </label>
-          </div>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={config.sync_on_startup}
+              onChange={(e) => setConfig({ ...config, sync_on_startup: e.target.checked })}
+            />
+            Synchronizuj przy uruchomieniu
+          </label>
         </div>
 
         <div className="card">
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Ścieżki</h3>
+          <h3 className="card-title">Ścieżki</h3>
 
           <div className="input-group">
             <label htmlFor="personal-path">Moje pliki</label>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="path-row">
               <input
                 id="personal-path"
                 type="text"
-                className="input"
+                className="input input-sm"
                 value={config.personal_sync_path}
                 onChange={(e) => setConfig({ ...config, personal_sync_path: e.target.value })}
                 style={{ flex: 1 }}
               />
               <button
                 type="button"
-                className="btn btn-outline"
-                style={{ width: 'auto', padding: '8px 12px', whiteSpace: 'nowrap' }}
+                className="btn btn-outline btn-sm"
                 onClick={async () => {
                   const folder = await pickFolder();
                   if (folder) setConfig({ ...config, personal_sync_path: folder });
                 }}
               >
-                Wybierz...
+                ...
               </button>
             </div>
           </div>
 
           <div className="input-group">
             <label htmlFor="shared-path">Udostępnione</label>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="path-row">
               <input
                 id="shared-path"
                 type="text"
-                className="input"
+                className="input input-sm"
                 value={config.shared_sync_path}
                 onChange={(e) => setConfig({ ...config, shared_sync_path: e.target.value })}
                 style={{ flex: 1 }}
               />
               <button
                 type="button"
-                className="btn btn-outline"
-                style={{ width: 'auto', padding: '8px 12px', whiteSpace: 'nowrap' }}
+                className="btn btn-outline btn-sm"
                 onClick={async () => {
                   const folder = await pickFolder();
                   if (folder) setConfig({ ...config, shared_sync_path: folder });
                 }}
               >
-                Wybierz...
+                ...
               </button>
             </div>
           </div>
         </div>
 
         <div className="card">
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Konto</h3>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-            {config.user_email}<br />
-            Serwer: {config.server_url}
+          <h3 className="card-title">Konto</h3>
+          <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+            {config.user_email} &middot; {config.server_url}
           </p>
 
           {message && (
-            <p style={{ fontSize: 12, marginBottom: 8, color: message.startsWith('Błąd') ? 'var(--color-error)' : 'var(--color-success)' }}>
+            <p style={{ fontSize: 11, marginBottom: 6, color: message.startsWith('Błąd') ? 'var(--color-error)' : 'var(--color-success)' }}>
               {message}
             </p>
           )}
 
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={saving}
-          >
-            {saving ? 'Zapisywanie...' : 'Zapisz ustawienia'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving} style={{ flex: 1 }}>
+              {saving ? 'Zapisywanie...' : 'Zapisz'}
+            </button>
+            <button type="button" className="btn btn-danger btn-sm" onClick={handleLogout} style={{ flex: 1 }}>
+              Wyloguj
+            </button>
+          </div>
+        </div>
+        <div className="card">
+          <h3 className="card-title">Diagnostyka</h3>
 
-          <hr className="section-separator" />
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={debugEnabled}
+              onChange={async (e) => {
+                const next = e.target.checked;
+                await setDebugMode(next);
+                setDebugEnabled(next);
+              }}
+            />
+            Tryb debug (szczegółowe logi)
+          </label>
+
+          <p style={{ fontSize: 10, color: 'var(--color-text-secondary)', margin: '4px 0 8px', wordBreak: 'break-all' }}>
+            Logi: {logPath}
+          </p>
 
           <button
             type="button"
-            className="btn btn-danger"
-            onClick={handleLogout}
+            className="btn btn-outline btn-sm"
+            onClick={async () => {
+              try {
+                const contents = await getLogContents(100);
+                setLogContents(contents);
+              } catch (err) {
+                setLogContents(`Błąd: ${err}`);
+              }
+            }}
           >
-            Wyloguj
+            Pokaż logi
           </button>
+
+          {logContents !== null && (
+            <pre style={{
+              fontSize: 10,
+              marginTop: 8,
+              padding: 8,
+              background: '#f5f5f5',
+              borderRadius: 4,
+              maxHeight: 200,
+              overflow: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+              {logContents}
+            </pre>
+          )}
         </div>
       </form>
     </div>

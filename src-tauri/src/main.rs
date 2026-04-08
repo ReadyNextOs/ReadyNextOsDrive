@@ -13,6 +13,7 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
@@ -24,6 +25,8 @@ struct AppState {
     sync_engine: Arc<sync::SyncEngine>,
     watcher: Mutex<watcher::FileWatcher>,
     scheduler: Mutex<SchedulerState>,
+    debug_enabled: AtomicBool,
+    log_path: PathBuf,
 }
 
 #[derive(Default)]
@@ -312,6 +315,7 @@ fn persist_login(
 
     reset_scheduler_for_login_or_config(state);
     configure_watcher_for_current_config(state)?;
+    state.sync_engine.set_idle();
 
     Ok(user_json)
 }
@@ -400,6 +404,40 @@ fn open_folder(state: State<'_, AppState>, path: String) -> Result<(), String> {
     }
 
     open::that(&requested).map_err(|e| format!("Failed to open folder: {}", e))
+}
+
+/// Get debug mode status and log file path
+#[tauri::command]
+fn get_debug_info(state: State<'_, AppState>) -> (bool, String) {
+    (
+        state.debug_enabled.load(Ordering::Relaxed),
+        state.log_path.to_string_lossy().to_string(),
+    )
+}
+
+/// Toggle debug mode
+#[tauri::command]
+fn set_debug_mode(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    state.debug_enabled.store(enabled, Ordering::Relaxed);
+    if enabled {
+        log::set_max_level(log::LevelFilter::Debug);
+        log::info!("Debug mode enabled, log file: {}", state.log_path.display());
+    } else {
+        log::set_max_level(log::LevelFilter::Info);
+        log::info!("Debug mode disabled");
+    }
+    Ok(())
+}
+
+/// Read log file contents (last N lines)
+#[tauri::command]
+fn get_log_contents(state: State<'_, AppState>, max_lines: Option<usize>) -> Result<String, String> {
+    let content = std::fs::read_to_string(&state.log_path)
+        .map_err(|e| format!("Nie udało się odczytać logów: {}", e))?;
+    let limit = max_lines.unwrap_or(200);
+    let lines: Vec<&str> = content.lines().collect();
+    let start = if lines.len() > limit { lines.len() - limit } else { 0 };
+    Ok(lines[start..].join("\n"))
 }
 
 /// Pick a folder using native OS dialog
@@ -544,7 +582,24 @@ fn main() {
         }
     }
 
-    env_logger::init();
+    // Setup log file in app data directory
+    let log_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("com.veloryn.cloudfile")
+        .join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_path = log_dir.join("veloryn-cloudfile.log");
+
+    use simplelog::{CombinedLogger, Config as LogConfig, LevelFilter, WriteLogger};
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .expect("Failed to open log file");
+    CombinedLogger::init(vec![
+        WriteLogger::new(LevelFilter::Info, LogConfig::default(), log_file),
+    ])
+    .expect("Failed to initialize logger");
 
     let sync_engine = Arc::new(sync::SyncEngine::new());
 
@@ -563,6 +618,8 @@ fn main() {
             sync_engine: sync_engine.clone(),
             watcher: Mutex::new(watcher::FileWatcher::new()),
             scheduler: Mutex::new(SchedulerState::default()),
+            debug_enabled: AtomicBool::new(false),
+            log_path: log_path.clone(),
         })
         .invoke_handler(tauri::generate_handler![
             login,
@@ -575,12 +632,19 @@ fn main() {
             get_activity,
             open_folder,
             pick_folder,
+            get_debug_info,
+            set_debug_mode,
+            get_log_contents,
         ])
         .setup(|app| {
             // Load persisted config from store
             if let Some(saved_config) = config::load_config(app.handle()) {
                 let state = app.state::<AppState>();
+                let is_configured = saved_config.is_configured();
                 *state.config() = saved_config;
+                if is_configured {
+                    state.sync_engine.set_idle();
+                }
                 if let Err(err) = configure_watcher_for_current_config(&state) {
                     log::warn!("Failed to configure watcher on startup: {}", err);
                 }
