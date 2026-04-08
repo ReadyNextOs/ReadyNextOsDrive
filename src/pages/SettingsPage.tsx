@@ -231,9 +231,27 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
             Logi: {logPath}
           </p>
 
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <button
             type="button"
             className="btn btn-outline btn-sm"
+            style={{ flex: 1 }}
+            onClick={async () => {
+              try {
+                const { open } = await import('@tauri-apps/plugin-shell');
+                await open(logPath);
+              } catch (err) {
+                console.error('Failed to open log file:', err);
+              }
+            }}
+          >
+            Otwórz plik logu
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{ flex: 1 }}
             onClick={async () => {
               try {
                 const contents = await getLogContents(100);
@@ -245,6 +263,7 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
           >
             Pokaż logi
           </button>
+          </div>
 
           {logContents !== null && (
             <pre style={{
