@@ -32,33 +32,54 @@ impl AuthToken {
 
 /// Store the auth token in the OS keychain.
 pub fn store_token(email: &str, token: &AuthToken) -> AppResult<()> {
+    log::info!("store_token: storing for email={}, type={:?}, expires_at={:?}", email, token.token_type, token.expires_at);
     let entry = Entry::new(SERVICE_NAME, email)
-        .map_err(|e| AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e)))?;
+        .map_err(|e| {
+            log::error!("store_token: failed to create keychain entry: {}", e);
+            AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
+        })?;
     let json = serde_json::to_string(token)
         .map_err(|e| AppError::auth(format!("Nie udało się zserializować tokenu: {}", e)))?;
     entry
         .set_password(&json)
-        .map_err(|e| AppError::auth(format!("Nie udało się zapisać tokenu: {}", e)))
+        .map_err(|e| {
+            log::error!("store_token: failed to save to keychain: {}", e);
+            AppError::auth(format!("Nie udało się zapisać tokenu: {}", e))
+        })?;
+    log::info!("store_token: token saved successfully for {}", email);
+    Ok(())
 }
 
 /// Retrieve the auth token from the OS keychain.
 pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
+    log::info!("get_token: looking up token for email={}", email);
     let entry = Entry::new(SERVICE_NAME, email)
-        .map_err(|e| AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e)))?;
+        .map_err(|e| {
+            log::error!("get_token: failed to create keychain entry: {}", e);
+            AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
+        })?;
     match entry.get_password() {
         Ok(json) => {
+            log::info!("get_token: found token in keychain (len={})", json.len());
             let token: AuthToken = serde_json::from_str(&json)
                 .map_err(|e| AppError::auth(format!("Nie udało się odczytać tokenu: {}", e)))?;
             if token.is_expired() {
-                // Remove expired token
+                log::warn!("get_token: token expired at {:?}, removing", token.expires_at);
                 let _ = entry.delete_credential();
                 Ok(None)
             } else {
+                log::info!("get_token: token valid, type={:?}", token.token_type);
                 Ok(Some(token))
             }
         }
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(AppError::auth(format!("Nie udało się pobrać tokenu: {}", e))),
+        Err(keyring::Error::NoEntry) => {
+            log::warn!("get_token: no token found in keychain for {}", email);
+            Ok(None)
+        }
+        Err(e) => {
+            log::error!("get_token: keychain error: {}", e);
+            Err(AppError::auth(format!("Nie udało się pobrać tokenu: {}", e)))
+        }
     }
 }
 

@@ -185,12 +185,16 @@ fn configure_watcher_for_current_config(state: &AppState) -> AppResult<()> {
 
 async fn run_sync_once(app: &tauri::AppHandle, state: &AppState, watch_triggered: bool) -> AppResult<()> {
     let cfg = state.config().clone();
+    log::info!("run_sync_once: email={}, server={}, configured={}", cfg.user_email, cfg.server_url, cfg.is_configured());
     if !cfg.is_configured() {
         return Err(AppError::sync("Aplikacja nie jest skonfigurowana"));
     }
 
     let token = auth::get_token(&cfg.user_email)?
-        .ok_or_else(|| AppError::auth("Brak tokenu logowania"))?;
+        .ok_or_else(|| {
+            log::error!("run_sync_once: no token in keychain for {}", cfg.user_email);
+            AppError::auth("Brak tokenu logowania")
+        })?;
 
     record_sync_attempt(state, watch_triggered);
     state.sync_engine.sync_all(app, &cfg, &token.token).await
@@ -293,6 +297,7 @@ fn persist_login(
     api_token: String,
     user: auth::LoginUser,
 ) -> AppResult<String> {
+    log::info!("persist_login: storing credentials for {} at {}", email, server_url);
     // Store token in keychain
     let token = auth::AuthToken {
         token: api_token,
@@ -300,6 +305,13 @@ fn persist_login(
         expires_at: None,
     };
     auth::store_token(&email, &token)?;
+
+    // Verify token was stored
+    match auth::get_token(&email) {
+        Ok(Some(_)) => log::info!("persist_login: token verification OK"),
+        Ok(None) => log::error!("persist_login: token verification FAILED - not found after store!"),
+        Err(e) => log::error!("persist_login: token verification FAILED - {}", e),
+    }
 
     let user_json = serde_json::to_string(&user)
         .map_err(|e| AppError::internal(format!("Błąd serializacji użytkownika: {}", e)))?;
