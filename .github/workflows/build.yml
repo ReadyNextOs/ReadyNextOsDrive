@@ -212,8 +212,8 @@ jobs:
             - **macOS**: Pobierz `.dmg`, otwórz i przeciągnij do Aplikacji
             - **Linux (Debian/Ubuntu)**: Pobierz `.deb` i zainstaluj: `sudo dpkg -i *.deb`
             - **Linux (uniwersalny)**: Pobierz `.AppImage`, nadaj uprawnienia `chmod +x` i uruchom
-          releaseDraft: true
-          prerelease: true
+          releaseDraft: false
+          prerelease: false
           includeRelease: ${{ github.event.inputs.create_release == 'true' || github.event_name == 'push' }}
 
       # --- Upload individual artifacts ---
