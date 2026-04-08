@@ -2,6 +2,25 @@
 
 Wszystkie istotne zmiany w projekcie Veloryn CloudFile.
 
+## [0.5.0] - 2026-04-08
+
+### Naprawione (Code Review)
+- **CRITICAL**: Race condition w synchronizacji — atomowe sprawdzenie i ustawienie statusu pod jednym lockiem
+- **CRITICAL**: Keychain Windows — login failuje jeśli token nie przeszedł weryfikacji; wymuszony natywny backend (windows-native)
+- Przeniesienie env::remove_var przed start async runtime (bezpieczeństwo wątkowe)
+- Blocking I/O na async runtime → tokio::fs + spawn_blocking
+- Walidacja ścieżek Windows — blokowanie rootów dysków (C:\, D:\)
+- Dodano `shell:default` do capabilities
+- CSP `connect-src` zawężone z `https:` do `self`
+- Odczyt logów: tail pliku (max 256KB) zamiast wczytywania całości do pamięci
+
+### Dodane
+- Szczegółowe logowanie operacji keychain (store/get/verify) do diagnostyki
+- Przycisk "Otwórz plik logu" w sekcji Diagnostyka
+
+### Usunięte
+- Nieużywana zależność `env_logger`
+
 ## [0.4.0] - 2026-04-08
 
 ### Dodane
