@@ -47,7 +47,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   return (
     <div className="container">
       <div className="logo">
-        <h1>ReadyNextOs Drive</h1>
+        <h1>Veloryn CloudFile</h1>
         <p>Połącz aplikację, aby zsynchronizować pliki</p>
       </div>
 
@@ -88,7 +88,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   id="token"
                   type="text"
                   className="input"
-                  placeholder="Wklej token z panelu ReadyNextOs"
+                  placeholder="Wklej token z panelu Veloryn"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   required

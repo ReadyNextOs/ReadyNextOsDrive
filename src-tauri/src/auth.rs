@@ -3,7 +3,7 @@ use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-const SERVICE_NAME: &str = "readynextos-drive";
+const SERVICE_NAME: &str = "veloryn-cloudfile";
 
 /// Authentication token stored securely in OS keychain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,7 +117,7 @@ pub async fn login(
         .json(&serde_json::json!({
             "email": email,
             "password": password,
-            "device_name": "ReadyNextOs Drive",
+            "device_name": "Veloryn CloudFile",
         }))
         .send()
         .await
@@ -165,7 +165,7 @@ pub async fn exchange_desktop_token(
         .post(&url)
         .json(&serde_json::json!({
             "token": trimmed_token,
-            "device_name": "ReadyNextOs Drive",
+            "device_name": "Veloryn CloudFile",
         }))
         .send()
         .await

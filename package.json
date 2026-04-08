@@ -1,7 +1,7 @@
 {
-  "name": "readynextos-drive",
+  "name": "veloryn-cloudfile",
   "version": "0.2.0",
-  "description": "ReadyNextOs Drive - Desktop sync client",
+  "description": "Veloryn CloudFile - Desktop sync client",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,9 +17,7 @@
     "@tauri-apps/plugin-os": "^2.0.0",
     "@tauri-apps/plugin-autostart": "^2.0.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "react-router-dom": "^6.22.0",
-    "lucide-react": "^0.303.0"
+    "react-dom": "^18.3.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

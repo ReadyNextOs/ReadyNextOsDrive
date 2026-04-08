@@ -1,7 +1,7 @@
 :root {
-  --color-primary: #1976d2;
-  --color-primary-light: #42a5f5;
-  --color-primary-dark: #1565c0;
+  --color-primary: #7b1fa2;
+  --color-primary-light: #ab47bc;
+  --color-primary-dark: #4a148c;
   --color-success: #2e7d32;
   --color-warning: #ed6c02;
   --color-error: #d32f2f;
@@ -83,7 +83,7 @@ body {
   border: 1px solid var(--color-primary);
 }
 .btn-outline:hover {
-  background: rgba(25, 118, 210, 0.04);
+  background: rgba(123, 31, 162, 0.04);
 }
 
 .btn-danger {
@@ -102,7 +102,7 @@ body {
 }
 .input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+  box-shadow: 0 0 0 2px rgba(123, 31, 162, 0.15);
 }
 
 .input-group {

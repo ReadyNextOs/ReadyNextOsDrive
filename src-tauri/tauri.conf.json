@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/tauri-schema/main/v2/tauri.conf.json",
-  "productName": "ReadyNextOs Drive",
+  "productName": "Veloryn CloudFile",
   "version": "0.2.0",
-  "identifier": "com.readynextos.drive",
+  "identifier": "com.veloryn.cloudfile",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ReadyNextOs Drive",
+        "title": "Veloryn CloudFile",
         "width": 400,
         "height": 600,
         "resizable": true,
@@ -25,7 +25,7 @@
       "id": "main-tray",
       "iconPath": "icons/tray-icon.png",
       "iconAsTemplate": true,
-      "tooltip": "ReadyNextOs Drive"
+      "tooltip": "Veloryn CloudFile"
     },
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; img-src 'self' data:; font-src 'self'"

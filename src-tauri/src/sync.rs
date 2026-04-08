@@ -128,7 +128,7 @@ impl SyncEngine {
         obscured_token: &str,
     ) -> AppResult<()> {
         // Check if this is the first sync run
-        let first_run_marker = Path::new(local_path).join(".readynextos-sync-init");
+        let first_run_marker = Path::new(local_path).join(".veloryn-sync-init");
         let is_first_run = !first_run_marker.exists();
 
         let mut args = vec![

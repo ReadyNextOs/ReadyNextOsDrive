@@ -425,11 +425,11 @@ fn update_tray_icon(app: &AppHandle, status: &SyncStatus) {
     };
 
     let tooltip = match status {
-        SyncStatus::Idle => "ReadyNextOs Drive — zsynchronizowano",
-        SyncStatus::Syncing => "ReadyNextOs Drive — synchronizacja...",
-        SyncStatus::Error(_) => "ReadyNextOs Drive — błąd",
-        SyncStatus::Conflict => "ReadyNextOs Drive — konflikt",
-        SyncStatus::NotConfigured => "ReadyNextOs Drive",
+        SyncStatus::Idle => "Veloryn CloudFile — zsynchronizowano",
+        SyncStatus::Syncing => "Veloryn CloudFile — synchronizacja...",
+        SyncStatus::Error(_) => "Veloryn CloudFile — błąd",
+        SyncStatus::Conflict => "Veloryn CloudFile — konflikt",
+        SyncStatus::NotConfigured => "Veloryn CloudFile",
     };
 
     if let Some(tray) = app.tray_by_id("main-tray") {
@@ -653,7 +653,7 @@ fn main() {
                 let _ = window.hide();
             }
 
-            log::info!("ReadyNextOs Drive started");
+            log::info!("Veloryn CloudFile started");
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -664,5 +664,5 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running ReadyNextOs Drive");
+        .expect("error while running Veloryn CloudFile");
 }

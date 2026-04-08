@@ -38,7 +38,7 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let base = home.join("ReadyNextOs");
+        let base = home.join("Veloryn");
 
         Self {
             server_url: String::new(),
