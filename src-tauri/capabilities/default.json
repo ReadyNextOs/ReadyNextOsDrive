@@ -13,6 +13,8 @@
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
     "dialog:default",
-    "shell:default"
+    "shell:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

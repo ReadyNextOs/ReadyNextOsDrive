@@ -5,8 +5,9 @@ import LoginPage from '@/pages/LoginPage';
 import StatusPage from '@/pages/StatusPage';
 import ActivityPage from '@/pages/ActivityPage';
 import SettingsPage from '@/pages/SettingsPage';
+import UpdatePage from '@/pages/UpdatePage';
 
-type Page = 'status' | 'activity' | 'settings';
+type Page = 'status' | 'activity' | 'settings' | 'update';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -39,9 +40,18 @@ export default function App() {
   useEffect(() => {
     const unlisten = listen<string>('navigate', (event) => {
       const page = event.payload as Page;
-      if (['status', 'activity', 'settings'].includes(page)) {
+      if (['status', 'activity', 'settings', 'update'].includes(page)) {
         setCurrentPage(page);
       }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  // Listen for background update-available event
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  useEffect(() => {
+    const unlisten = listen<string>('update-available', () => {
+      setUpdateAvailable(true);
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
@@ -82,12 +92,22 @@ export default function App() {
         >
           Ustawienia
         </button>
+        <button
+          type="button"
+          className={`nav-item ${currentPage === 'update' ? 'active' : ''}`}
+          onClick={() => { setCurrentPage('update'); setUpdateAvailable(false); }}
+          style={{ position: 'relative' }}
+        >
+          Aktualizacja
+          {updateAvailable && <span className="update-dot" />}
+        </button>
       </div>
 
       <div className="page-scroll">
         {currentPage === 'status' && <StatusPage />}
         {currentPage === 'activity' && <ActivityPage />}
         {currentPage === 'settings' && <SettingsPage onLogout={handleLogout} />}
+        {currentPage === 'update' && <UpdatePage />}
       </div>
     </div>
   );

@@ -130,14 +130,15 @@ jobs:
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           tagName: v__VERSION__
-          releaseName: 'ReadyNextOs Drive v__VERSION__'
+          releaseName: 'Veloryn CloudFile v__VERSION__'
           releaseBody: |
-            ## ReadyNextOs Drive v__VERSION__
+            ## Veloryn CloudFile v__VERSION__
 
-            Klient synchronizacji plików dla ReadyNextOs.
+            Klient synchronizacji plików.
 
             ### Instalacja
             - **Windows**: Pobierz `.msi` i uruchom instalator

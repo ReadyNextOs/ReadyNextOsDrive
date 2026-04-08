@@ -655,6 +655,8 @@ fn main() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState {
             config: Mutex::new(AppConfig::default()),
             sync_engine: sync_engine.clone(),
@@ -699,6 +701,31 @@ fn main() {
                     loop {
                         interval.tick().await;
                         run_scheduler_tick(&handle).await;
+                    }
+                });
+            }
+
+            // Background update check — once per day
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri_plugin_updater::UpdaterExt;
+                    // Initial delay: 30 seconds after startup
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                    let mut interval = tokio::time::interval(Duration::from_secs(86400));
+                    loop {
+                        interval.tick().await;
+                        match handle.updater() {
+                            Ok(updater) => match updater.check().await {
+                                Ok(Some(update)) => {
+                                    log::info!("Update available: v{}", update.version);
+                                    let _ = handle.emit("update-available", &update.version);
+                                }
+                                Ok(None) => log::debug!("No update available"),
+                                Err(e) => log::warn!("Update check failed: {}", e),
+                            },
+                            Err(e) => log::warn!("Updater init failed: {}", e),
+                        }
                     }
                 });
             }

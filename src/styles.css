@@ -302,3 +302,14 @@ body {
   display: flex;
   gap: 6px;
 }
+
+/* Update notification dot */
+.update-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
