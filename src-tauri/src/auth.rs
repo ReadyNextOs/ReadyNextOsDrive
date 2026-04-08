@@ -1,5 +1,7 @@
+use crate::error::{AppError, AppResult};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 const SERVICE_NAME: &str = "readynextos-drive";
 
@@ -29,18 +31,24 @@ impl AuthToken {
 }
 
 /// Store the auth token in the OS keychain.
-pub fn store_token(email: &str, token: &AuthToken) -> Result<(), String> {
-    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string(token).map_err(|e| e.to_string())?;
-    entry.set_password(&json).map_err(|e| e.to_string())
+pub fn store_token(email: &str, token: &AuthToken) -> AppResult<()> {
+    let entry = Entry::new(SERVICE_NAME, email)
+        .map_err(|e| AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e)))?;
+    let json = serde_json::to_string(token)
+        .map_err(|e| AppError::auth(format!("Nie udało się zserializować tokenu: {}", e)))?;
+    entry
+        .set_password(&json)
+        .map_err(|e| AppError::auth(format!("Nie udało się zapisać tokenu: {}", e)))
 }
 
 /// Retrieve the auth token from the OS keychain.
-pub fn get_token(email: &str) -> Result<Option<AuthToken>, String> {
-    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| e.to_string())?;
+pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
+    let entry = Entry::new(SERVICE_NAME, email)
+        .map_err(|e| AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e)))?;
     match entry.get_password() {
         Ok(json) => {
-            let token: AuthToken = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            let token: AuthToken = serde_json::from_str(&json)
+                .map_err(|e| AppError::auth(format!("Nie udało się odczytać tokenu: {}", e)))?;
             if token.is_expired() {
                 // Remove expired token
                 let _ = entry.delete_credential();
@@ -50,17 +58,18 @@ pub fn get_token(email: &str) -> Result<Option<AuthToken>, String> {
             }
         }
         Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(AppError::auth(format!("Nie udało się pobrać tokenu: {}", e))),
     }
 }
 
 /// Remove the auth token from the OS keychain.
-pub fn remove_token(email: &str) -> Result<(), String> {
-    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| e.to_string())?;
+pub fn remove_token(email: &str) -> AppResult<()> {
+    let entry = Entry::new(SERVICE_NAME, email)
+        .map_err(|e| AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e)))?;
     match entry.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(AppError::auth(format!("Nie udało się usunąć tokenu: {}", e))),
     }
 }
 
@@ -69,6 +78,18 @@ pub fn remove_token(email: &str) -> Result<(), String> {
 pub struct LoginResponse {
     pub token: String,
     pub user: LoginUser,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DesktopTokenExchangeResponse {
+    pub token: String,
+    pub user: LoginUser,
+    pub config: DesktopTokenConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DesktopTokenConfig {
+    pub server_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -84,8 +105,11 @@ pub async fn login(
     server_url: &str,
     email: &str,
     password: &str,
-) -> Result<LoginResponse, String> {
-    let client = reqwest::Client::new();
+) -> AppResult<LoginResponse> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| AppError::network(format!("Nie udało się zbudować klienta HTTP: {}", e)))?;
     let url = format!("{}/api/v1/auth/login", server_url.trim_end_matches('/'));
 
     let response = client
@@ -97,16 +121,88 @@ pub async fn login(
         }))
         .send()
         .await
-        .map_err(|e| format!("Connection error: {}", e))?;
+        .map_err(|e| AppError::network(format!("Błąd połączenia: {}", e)))?;
 
     if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("Login failed ({}): {}", status, body));
+        return Err(match response.status().as_u16() {
+            401 => AppError::auth("Nieprawidłowy e-mail lub hasło"),
+            403 => AppError::auth("Logowanie zostało odrzucone przez serwer"),
+            408 | 504 => AppError::network("Serwer nie odpowiedział na czas"),
+            status => AppError::auth(format!("Logowanie nie powiodło się (HTTP {})", status)),
+        });
     }
 
     response
         .json::<LoginResponse>()
         .await
-        .map_err(|e| format!("Invalid response: {}", e))
+        .map_err(|e| AppError::network(format!("Nieprawidłowa odpowiedź serwera: {}", e)))
+}
+
+/// Exchange a short-lived desktop bootstrap token for the normal API token.
+pub async fn exchange_desktop_token(
+    bootstrap_token: &str,
+) -> AppResult<DesktopTokenExchangeResponse> {
+    let trimmed_token = bootstrap_token.trim();
+    if trimmed_token.is_empty() {
+        return Err(AppError::auth("Token jest wymagany"));
+    }
+
+    let claims = decode_desktop_token_claims(trimmed_token)?;
+    let server_url = claims
+        .server_url
+        .ok_or_else(|| AppError::auth("Token desktopowy nie zawiera server_url"))?;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| AppError::network(format!("Nie udało się zbudować klienta HTTP: {}", e)))?;
+    let url = format!(
+        "{}/api/v1/desktop-auth/exchange",
+        server_url.trim_end_matches('/')
+    );
+
+    let response = client
+        .post(&url)
+        .json(&serde_json::json!({
+            "token": trimmed_token,
+            "device_name": "ReadyNextOs Drive",
+        }))
+        .send()
+        .await
+        .map_err(|e| AppError::network(format!("Błąd połączenia: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(match response.status().as_u16() {
+            401 => AppError::auth("Token desktopowy jest nieprawidłowy"),
+            409 => AppError::auth("Token desktopowy został już wykorzystany"),
+            410 => AppError::auth("Token desktopowy wygasł"),
+            408 | 504 => AppError::network("Serwer nie odpowiedział na czas"),
+            status => AppError::auth(format!("Wymiana tokenu nie powiodła się (HTTP {})", status)),
+        });
+    }
+
+    response
+        .json::<DesktopTokenExchangeResponse>()
+        .await
+        .map_err(|e| AppError::network(format!("Nieprawidłowa odpowiedź serwera: {}", e)))
+}
+
+#[derive(Debug, Deserialize)]
+struct DesktopTokenClaims {
+    server_url: Option<String>,
+}
+
+fn decode_desktop_token_claims(token: &str) -> AppResult<DesktopTokenClaims> {
+    let payload = token
+        .split('.')
+        .nth(1)
+        .ok_or_else(|| AppError::auth("Token desktopowy ma nieprawidłowy format"))?;
+    let decoded = base64::Engine::decode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        payload,
+    )
+    .map_err(|e| AppError::auth(format!("Nieprawidłowy payload tokenu desktopowego: {}", e)))?;
+
+    serde_json::from_slice::<DesktopTokenClaims>(&decoded)
+        .map_err(|e| AppError::auth(format!("Nieprawidłowe claims tokenu desktopowego: {}", e)))
 }

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { getConfig } from '@/lib/tauri';
 import LoginPage from '@/pages/LoginPage';
 import StatusPage from '@/pages/StatusPage';
@@ -34,6 +35,17 @@ export default function App() {
     setCurrentPage('status');
   }, []);
 
+  // Listen for navigation events from tray menu
+  useEffect(() => {
+    const unlisten = listen<string>('navigate', (event) => {
+      const page = event.payload as Page;
+      if (['status', 'activity', 'settings'].includes(page)) {
+        setCurrentPage(page);
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   if (loading) {
     return (
       <div className="container" style={{ textAlign: 'center', paddingTop: 40 }}>
@@ -49,29 +61,34 @@ export default function App() {
   return (
     <div>
       <div className="nav">
-        <div
+        <button
+          type="button"
           className={`nav-item ${currentPage === 'status' ? 'active' : ''}`}
           onClick={() => setCurrentPage('status')}
         >
           Status
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className={`nav-item ${currentPage === 'activity' ? 'active' : ''}`}
           onClick={() => setCurrentPage('activity')}
         >
           Aktywność
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className={`nav-item ${currentPage === 'settings' ? 'active' : ''}`}
           onClick={() => setCurrentPage('settings')}
         >
           Ustawienia
-        </div>
+        </button>
       </div>
 
-      {currentPage === 'status' && <StatusPage />}
-      {currentPage === 'activity' && <ActivityPage />}
-      {currentPage === 'settings' && <SettingsPage onLogout={handleLogout} />}
+      <div className="page-scroll">
+        {currentPage === 'status' && <StatusPage />}
+        {currentPage === 'activity' && <ActivityPage />}
+        {currentPage === 'settings' && <SettingsPage onLogout={handleLogout} />}
+      </div>
     </div>
   );
 }

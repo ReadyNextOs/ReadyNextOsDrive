@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react';
-import { getConfig, updateConfig, logout, type AppConfig } from '@/lib/tauri';
+import { getConfig, updateConfig, logout, pickFolder, type AppConfig } from '@/lib/tauri';
 
 interface SettingsPageProps {
   onLogout: () => void;
@@ -9,9 +9,27 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    getConfig().then(setConfig).catch(console.error);
+    let cancelled = false;
+
+    getConfig()
+      .then((nextConfig) => {
+        if (!cancelled) {
+          setConfig(nextConfig);
+          setLoadError('');
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLoadError(`Nie udało się wczytać ustawień: ${err}`);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSave = useCallback(async (e: FormEvent) => {
@@ -31,6 +49,9 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
   }, [config]);
 
   const handleLogout = useCallback(async () => {
+    const confirmed = window.confirm('Czy na pewno chcesz się wylogować? Synchronizacja zostanie zatrzymana.');
+    if (!confirmed) return;
+
     try {
       await logout();
       onLogout();
@@ -39,7 +60,25 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
     }
   }, [onLogout]);
 
-  if (!config) return null;
+  if (loadError) {
+    return (
+      <div className="container">
+        <div className="card">
+          <p className="error">{loadError}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div className="container">
+        <div className="card">
+          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Ładowanie ustawień...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
@@ -56,7 +95,15 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
               min={30}
               max={3600}
               value={config.sync_interval_secs}
-              onChange={(e) => setConfig({ ...config, sync_interval_secs: parseInt(e.target.value) || 300 })}
+              onChange={(e) => {
+                const nextValue = parseInt(e.target.value, 10);
+                if (!Number.isNaN(nextValue)) {
+                  setConfig({
+                    ...config,
+                    sync_interval_secs: Math.max(30, Math.min(3600, nextValue)),
+                  });
+                }
+              }}
             />
           </div>
 
@@ -90,24 +137,52 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
 
           <div className="input-group">
             <label htmlFor="personal-path">Moje pliki</label>
-            <input
-              id="personal-path"
-              type="text"
-              className="input"
-              value={config.personal_sync_path}
-              onChange={(e) => setConfig({ ...config, personal_sync_path: e.target.value })}
-            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                id="personal-path"
+                type="text"
+                className="input"
+                value={config.personal_sync_path}
+                onChange={(e) => setConfig({ ...config, personal_sync_path: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ width: 'auto', padding: '8px 12px', whiteSpace: 'nowrap' }}
+                onClick={async () => {
+                  const folder = await pickFolder();
+                  if (folder) setConfig({ ...config, personal_sync_path: folder });
+                }}
+              >
+                Wybierz...
+              </button>
+            </div>
           </div>
 
           <div className="input-group">
             <label htmlFor="shared-path">Udostępnione</label>
-            <input
-              id="shared-path"
-              type="text"
-              className="input"
-              value={config.shared_sync_path}
-              onChange={(e) => setConfig({ ...config, shared_sync_path: e.target.value })}
-            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                id="shared-path"
+                type="text"
+                className="input"
+                value={config.shared_sync_path}
+                onChange={(e) => setConfig({ ...config, shared_sync_path: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ width: 'auto', padding: '8px 12px', whiteSpace: 'nowrap' }}
+                onClick={async () => {
+                  const folder = await pickFolder();
+                  if (folder) setConfig({ ...config, shared_sync_path: folder });
+                }}
+              >
+                Wybierz...
+              </button>
+            </div>
           </div>
         </div>
 
@@ -128,10 +203,11 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
             type="submit"
             className="btn btn-primary"
             disabled={saving}
-            style={{ marginBottom: 8 }}
           >
             {saving ? 'Zapisywanie...' : 'Zapisz ustawienia'}
           </button>
+
+          <hr className="section-separator" />
 
           <button
             type="button"

@@ -39,6 +39,11 @@ export async function login(serverUrl: string, email: string, password: string):
   return JSON.parse(result);
 }
 
+export async function loginWithToken(token: string): Promise<LoginUser> {
+  const result = await invoke<string>('login_with_token', { token });
+  return JSON.parse(result);
+}
+
 export async function logout(): Promise<void> {
   await invoke('logout');
 }
@@ -65,4 +70,8 @@ export async function getActivity(limit?: number): Promise<ActivityEntry[]> {
 
 export async function openFolder(path: string): Promise<void> {
   await invoke('open_folder', { path });
+}
+
+export async function pickFolder(): Promise<string | null> {
+  return invoke<string | null>('pick_folder');
 }

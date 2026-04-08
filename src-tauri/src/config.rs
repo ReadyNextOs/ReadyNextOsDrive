@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -106,16 +107,25 @@ pub fn load_config(app: &AppHandle) -> Option<AppConfig> {
 }
 
 /// Save config to tauri-plugin-store.
-pub fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
-    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
-    let value = serde_json::to_value(config).map_err(|e| e.to_string())?;
+pub fn save_config(app: &AppHandle, config: &AppConfig) -> AppResult<()> {
+    let store = app
+        .store(STORE_FILE)
+        .map_err(|e| AppError::config(format!("Nie udało się otworzyć store: {}", e)))?;
+    let value = serde_json::to_value(config)
+        .map_err(|e| AppError::config(format!("Nie udało się zserializować konfiguracji: {}", e)))?;
     store.set(STORE_KEY.to_string(), value);
-    store.save().map_err(|e| e.to_string())
+    store
+        .save()
+        .map_err(|e| AppError::config(format!("Nie udało się zapisać konfiguracji: {}", e)))
 }
 
 /// Clear config from tauri-plugin-store (e.g. on logout).
-pub fn clear_config(app: &AppHandle) -> Result<(), String> {
-    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+pub fn clear_config(app: &AppHandle) -> AppResult<()> {
+    let store = app
+        .store(STORE_FILE)
+        .map_err(|e| AppError::config(format!("Nie udało się otworzyć store: {}", e)))?;
     let _ = store.delete(STORE_KEY);
-    store.save().map_err(|e| e.to_string())
+    store
+        .save()
+        .map_err(|e| AppError::config(format!("Nie udało się wyczyścić konfiguracji: {}", e)))
 }

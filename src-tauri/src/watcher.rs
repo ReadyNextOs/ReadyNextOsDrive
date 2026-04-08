@@ -54,6 +54,10 @@ impl FileWatcher {
         self.rx = None;
     }
 
+    pub fn is_running(&self) -> bool {
+        self.watcher.is_some()
+    }
+
     /// Check if there are pending file change events.
     /// Returns true if changes were detected.
     pub fn has_changes(&self) -> bool {

@@ -1,23 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { getActivity, type ActivityEntry } from '@/lib/tauri';
 
 export default function ActivityPage() {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const data = await getActivity(100);
-      setEntries([...data].reverse());
-    } catch (err) {
-      console.error('Failed to load activity:', err);
-    }
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+
+    const refresh = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const data = await getActivity(100);
+        if (!cancelled) {
+          setEntries([...data].reverse());
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load activity:', err);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
     refresh();
     const interval = setInterval(refresh, 10000);
-    return () => clearInterval(interval);
-  }, [refresh]);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <div className="container">
@@ -32,8 +46,8 @@ export default function ActivityPage() {
           </p>
         )}
 
-        {entries.map((entry, i) => (
-          <div className="activity-item" key={i}>
+        {entries.map((entry) => (
+          <div className="activity-item" key={`${entry.timestamp}-${entry.action}-${entry.file_path}`}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontWeight: 500 }}>
                 {formatAction(entry.action)}
@@ -43,7 +57,7 @@ export default function ActivityPage() {
               </span>
             </div>
             {entry.file_path && (
-              <div style={{ color: 'var(--color-text-secondary)', fontSize: 11 }}>
+              <div className="activity-path" title={entry.file_path}>
                 {entry.file_path}
               </div>
             )}
