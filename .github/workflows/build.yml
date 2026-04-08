@@ -107,87 +107,18 @@ jobs:
           Copy-Item "rclone-v${{ env.RCLONE_VERSION }}-windows-amd64\rclone.exe" "src-tauri\sidecars\rclone${{ matrix.sidecar_suffix }}"
           Remove-Item rclone.zip, "rclone-v*" -Recurse -Force
 
-      # --- Generate icons if missing ---
-      - name: Generate placeholder icons (Linux/macOS)
-        if: runner.os != 'Windows'
+      # --- Validate icons exist ---
+      - name: Validate required icons exist
         run: |
-          cd src-tauri/icons
-          python3 -c "
-          import struct, zlib, shutil
-          def png(w,h):
-              def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
-              raw=b''
-              for y in range(h):
-                  raw+=b'\x00'
-                  for x in range(w):
-                      raw+=b'\x19\x76\xd2\xff'
-              return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
-          def ico(sizes):
-              images=[]
-              for s in sizes:
-                  d=png(s,s)
-                  images.append((s,d))
-              n=len(images)
-              hdr=struct.pack('<HHH',0,1,n)
-              offset=6+n*16
-              entries=b''
-              data=b''
-              for s,d in images:
-                  w=s if s<256 else 0
-                  entries+=struct.pack('<BBBBHHII',w,w,0,0,1,32,len(d),offset)
-                  data+=d
-                  offset+=len(d)
-              return hdr+entries+data
-          for s in [32,128,256]:
-              p=png(s,s)
-              with open(f'{s}x{s}.png','wb') as f: f.write(p)
-          shutil.copy('256x256.png','128x128@2x.png')
-          with open('icon.ico','wb') as f: f.write(ico([32,128,256]))
-          shutil.copy('128x128.png','icon.icns')
-          shutil.copy('32x32.png','tray-icon.png')
-          print('Generated all placeholder icons')
-          "
-
-      - name: Generate placeholder icons (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          cd src-tauri/icons
-          python -c @"
-          import struct, zlib, shutil
-          def png(w,h):
-              def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
-              raw=b''
-              for y in range(h):
-                  raw+=b'\x00'
-                  for x in range(w):
-                      raw+=b'\x19\x76\xd2\xff'
-              return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
-          def ico(sizes):
-              images=[]
-              for s in sizes:
-                  d=png(s,s)
-                  images.append((s,d))
-              n=len(images)
-              hdr=struct.pack('<HHH',0,1,n)
-              offset=6+n*16
-              entries=b''
-              data=b''
-              for s,d in images:
-                  w=s if s<256 else 0
-                  entries+=struct.pack('<BBBBHHII',w,w,0,0,1,32,len(d),offset)
-                  data+=d
-                  offset+=len(d)
-              return hdr+entries+data
-          for s in [32,128,256]:
-              p=png(s,s)
-              with open(f'{s}x{s}.png','wb') as f: f.write(p)
-          shutil.copy('256x256.png','128x128@2x.png')
-          with open('icon.ico','wb') as f: f.write(ico([32,128,256]))
-          shutil.copy('128x128.png','icon.icns')
-          shutil.copy('32x32.png','tray-icon.png')
-          print('Generated all placeholder icons')
-          "@
+          missing=0
+          for f in src-tauri/icons/icon.ico src-tauri/icons/icon.icns src-tauri/icons/32x32.png src-tauri/icons/128x128.png src-tauri/icons/256x256.png src-tauri/icons/128x128@2x.png src-tauri/icons/tray-icon.png; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing required icon: $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then exit 1; fi
+          echo "All required icons present"
 
       # --- Install frontend deps ---
       - name: Install frontend dependencies
