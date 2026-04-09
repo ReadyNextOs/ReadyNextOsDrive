@@ -7,6 +7,27 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
+/// Create an rclone command, trying the bundled sidecar first and falling back
+/// to system-installed rclone if the sidecar binary is missing.
+fn rclone_command(app: &AppHandle) -> tauri_plugin_shell::process::Command {
+    // Try bundled sidecar first
+    match app.shell().sidecar("sidecars/rclone") {
+        Ok(cmd) => {
+            log::debug!("Using bundled rclone sidecar");
+            cmd
+        }
+        Err(sidecar_err) => {
+            log::warn!(
+                "Sidecar rclone not found ({}), falling back to system rclone",
+                sidecar_err
+            );
+            // Fall back to system-installed rclone (e.g. via brew on macOS,
+            // scoop/winget on Windows, or package manager on Linux)
+            app.shell().command("rclone")
+        }
+    }
+}
+
 /// Payload emitted to the frontend via the `sync-progress` event.
 #[derive(Clone, serde::Serialize)]
 pub struct SyncProgressPayload {
@@ -257,9 +278,7 @@ impl SyncEngine {
 
         let output = tokio::time::timeout(
             Duration::from_secs(1800),
-            app.shell()
-                .sidecar("sidecars/rclone")
-                .map_err(|e| AppError::sync(format!("Failed to create rclone sidecar: {}", e)))?
+            rclone_command(app)
                 .args(&args)
                 .env("RCLONE_WEBDAV_URL", webdav_url)
                 .env("RCLONE_WEBDAV_USER", username)
@@ -363,10 +382,7 @@ impl SyncEngine {
 
     /// Obscure a password for rclone (rclone uses its own obscure format).
     async fn obscure_password(&self, app: &AppHandle, password: &str) -> AppResult<String> {
-        let (mut rx, mut child) = app
-            .shell()
-            .sidecar("sidecars/rclone")
-            .map_err(|e| AppError::sync(format!("Failed to create rclone sidecar: {}", e)))?
+        let (mut rx, mut child) = rclone_command(app)
             .args(["obscure", "-"])
             .spawn()
             .map_err(|e| AppError::sync(format!("Failed to spawn rclone: {}", e)))?;

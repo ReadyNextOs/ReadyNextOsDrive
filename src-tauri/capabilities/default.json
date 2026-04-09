@@ -17,11 +17,17 @@
     "shell:allow-open",
     {
       "identifier": "shell:allow-execute",
-      "allow": [{ "name": "sidecars/rclone", "sidecar": true, "args": true }]
+      "allow": [
+        { "name": "sidecars/rclone", "sidecar": true, "args": true },
+        { "name": "rclone", "args": true }
+      ]
     },
     {
       "identifier": "shell:allow-spawn",
-      "allow": [{ "name": "sidecars/rclone", "sidecar": true, "args": true }]
+      "allow": [
+        { "name": "sidecars/rclone", "sidecar": true, "args": true },
+        { "name": "rclone", "args": true }
+      ]
     },
     "shell:allow-stdin-write",
     "shell:allow-kill",
