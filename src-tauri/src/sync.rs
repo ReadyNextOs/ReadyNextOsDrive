@@ -7,6 +7,7 @@ use crate::trash::LocalTrashManager;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_notification::NotificationExt;
 
 /// Payload emitted to the frontend via the `sync-progress` event.
 #[derive(Clone, serde::Serialize)]
@@ -71,6 +72,9 @@ impl SyncEngine {
             let mut status = self.status_guard();
             if *status == SyncStatus::Syncing {
                 return Err(AppError::sync("Synchronizacja już w toku"));
+            }
+            if *status == SyncStatus::Paused {
+                return Ok(()); // Skip sync when paused
             }
             *status = SyncStatus::Syncing;
         }
@@ -488,6 +492,14 @@ impl SyncEngine {
                     }),
                 );
 
+                // Desktop notification for conflict
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Veloryn CloudFile — Konflikt")
+                    .body(format!("Plik {} został zmodyfikowany na obu urządzeniach", rel_path))
+                    .show();
+
                 // Record conflict state in DB
                 let existing = db::get_file_state(db, rel_path, zone)?;
                 let base = existing.unwrap_or(FileState {
@@ -569,6 +581,29 @@ impl SyncEngine {
 
     pub fn set_idle(&self) {
         self.set_status(SyncStatus::Idle);
+    }
+
+    /// Pause sync — scheduler will skip sync ticks until resumed.
+    pub fn pause(&self) {
+        let current = self.get_status();
+        // Only pause if idle or syncing (not if already paused or not configured)
+        if matches!(current, SyncStatus::Idle | SyncStatus::Syncing | SyncStatus::Error(_)) {
+            self.set_status(SyncStatus::Paused);
+            log::info!("Sync paused by user");
+        }
+    }
+
+    /// Resume sync — scheduler will resume normal operation.
+    pub fn resume(&self) {
+        if self.get_status() == SyncStatus::Paused {
+            self.set_status(SyncStatus::Idle);
+            log::info!("Sync resumed by user");
+        }
+    }
+
+    /// Check if sync is paused.
+    pub fn is_paused(&self) -> bool {
+        self.get_status() == SyncStatus::Paused
     }
 
     fn set_error_status(&self, error: String) -> AppError {

@@ -78,6 +78,8 @@ pub enum SyncStatus {
     Idle,
     /// Sync in progress
     Syncing,
+    /// Sync paused by user
+    Paused,
     /// There's a conflict to resolve
     Conflict,
     /// Connection error

@@ -504,6 +504,18 @@ fn get_activity(state: State<'_, AppState>, limit: Option<usize>) -> Vec<Activit
     state.sync_engine.get_activity(limit.unwrap_or(50))
 }
 
+/// Pause synchronization
+#[tauri::command]
+fn pause_sync(state: State<'_, AppState>) {
+    state.sync_engine.pause();
+}
+
+/// Resume synchronization
+#[tauri::command]
+fn resume_sync(state: State<'_, AppState>) {
+    state.sync_engine.resume();
+}
+
 /// Open a local folder in the file manager
 #[tauri::command]
 fn open_folder(state: State<'_, AppState>, path: String) -> Result<(), String> {
@@ -611,6 +623,7 @@ fn update_tray_icon(app: &AppHandle, status: &SyncStatus) {
     let icon_bytes: &[u8] = match status {
         SyncStatus::Idle => include_bytes!("../icons/tray-idle.png"),
         SyncStatus::Syncing => include_bytes!("../icons/tray-syncing.png"),
+        SyncStatus::Paused => include_bytes!("../icons/tray-icon.png"),
         SyncStatus::Error(_) => include_bytes!("../icons/tray-error.png"),
         SyncStatus::Conflict => include_bytes!("../icons/tray-error.png"),
         SyncStatus::NotConfigured => include_bytes!("../icons/tray-icon.png"),
@@ -619,6 +632,7 @@ fn update_tray_icon(app: &AppHandle, status: &SyncStatus) {
     let tooltip = match status {
         SyncStatus::Idle => "Veloryn CloudFile — zsynchronizowano",
         SyncStatus::Syncing => "Veloryn CloudFile — synchronizacja...",
+        SyncStatus::Paused => "Veloryn CloudFile — wstrzymano",
         SyncStatus::Error(_) => "Veloryn CloudFile — błąd",
         SyncStatus::Conflict => "Veloryn CloudFile — konflikt",
         SyncStatus::NotConfigured => "Veloryn CloudFile",
@@ -694,9 +708,17 @@ fn build_tray_menu(app: &AppHandle, status: &SyncStatus) -> tauri::Result<Menu<t
     let status_label = match status {
         SyncStatus::Idle => "● Zsynchronizowano",
         SyncStatus::Syncing => "◌ Synchronizacja...",
+        SyncStatus::Paused => "⏸ Wstrzymano",
         SyncStatus::Error(_) => "✕ Błąd synchronizacji",
         SyncStatus::Conflict => "⚠ Konflikt",
         SyncStatus::NotConfigured => "○ Nie skonfigurowano",
+    };
+
+    let is_paused = matches!(status, SyncStatus::Paused);
+    let pause_label = if is_paused {
+        "Wznów synchronizację"
+    } else {
+        "Wstrzymaj synchronizację"
     };
 
     let status_item = MenuItem::with_id(app, "status", status_label, false, None::<&str>)?;
@@ -720,7 +742,14 @@ fn build_tray_menu(app: &AppHandle, status: &SyncStatus) -> tauri::Result<Menu<t
         app,
         "sync_now",
         "Synchronizuj teraz",
-        !matches!(status, SyncStatus::Syncing),
+        !matches!(status, SyncStatus::Syncing | SyncStatus::Paused),
+        None::<&str>,
+    )?;
+    let pause_resume = MenuItem::with_id(
+        app,
+        "pause_resume",
+        pause_label,
+        !matches!(status, SyncStatus::NotConfigured | SyncStatus::Syncing),
         None::<&str>,
     )?;
     let sep3 = PredefinedMenuItem::separator(app)?;
@@ -737,6 +766,7 @@ fn build_tray_menu(app: &AppHandle, status: &SyncStatus) -> tauri::Result<Menu<t
             &open_shared,
             &sep2,
             &sync_now,
+            &pause_resume,
             &sep3,
             &settings_item,
             &sep4,
@@ -780,6 +810,22 @@ fn handle_tray_menu_event(app: &AppHandle, event: MenuEvent) {
                     }
                 }
             });
+        }
+        "pause_resume" => {
+            let state = app.state::<AppState>();
+            let engine = state.sync_engine.clone();
+            if engine.is_paused() {
+                engine.resume();
+            } else {
+                engine.pause();
+            }
+            let new_status = engine.get_status();
+            update_tray_icon(app, &new_status);
+            if let Some(tray) = app.tray_by_id("main-tray") {
+                if let Ok(menu) = build_tray_menu(app, &new_status) {
+                    let _ = tray.set_menu(Some(menu));
+                }
+            }
         }
         "settings" => {
             show_window(app);
@@ -862,6 +908,8 @@ fn main() {
             update_config,
             trigger_sync,
             get_activity,
+            pause_sync,
+            resume_sync,
             open_folder,
             pick_folder,
             get_debug_info,
