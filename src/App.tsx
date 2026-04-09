@@ -6,6 +6,7 @@ import StatusPage from '@/pages/StatusPage';
 import ActivityPage from '@/pages/ActivityPage';
 import SettingsPage from '@/pages/SettingsPage';
 import UpdatePage from '@/pages/UpdatePage';
+import SyncToast from '@/components/SyncToast';
 
 type Page = 'status' | 'activity' | 'settings' | 'update';
 
@@ -109,6 +110,7 @@ export default function App() {
         {currentPage === 'settings' && <SettingsPage onLogout={handleLogout} />}
         {currentPage === 'update' && <UpdatePage />}
       </div>
+      <SyncToast />
     </div>
   );
 }

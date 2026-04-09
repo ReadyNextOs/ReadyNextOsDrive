@@ -3,9 +3,53 @@ use crate::error::{AppError, AppResult};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
+
+/// Payload emitted to the frontend via the `sync-progress` event.
+#[derive(Clone, serde::Serialize)]
+pub struct SyncProgressPayload {
+    pub phase: String,
+    pub file_count: usize,
+    pub message: String,
+    pub source: String,
+}
+
+/// Count file operations from rclone verbose output.
+fn count_sync_operations(stdout: &str, stderr: &str) -> usize {
+    // First try: parse the "Transferred:  N / N" line (file count, not bytes)
+    for line in stderr.lines().chain(stdout.lines()).rev() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Transferred:") {
+            let rest = rest.trim();
+            // Skip the bytes line (contains "B" like "1.234 GiB")
+            if rest.contains('B') {
+                continue;
+            }
+            // Parse "5 / 10, 50%" — get first number
+            if let Some(count_str) = rest.split('/').next() {
+                if let Ok(count) = count_str.trim().parse::<usize>() {
+                    return count;
+                }
+            }
+        }
+    }
+
+    // Fallback: count operation lines from bisync verbose output
+    stdout
+        .lines()
+        .chain(stderr.lines())
+        .filter(|line| {
+            line.contains(": Copied")
+                || line.contains(": Deleted")
+                || line.contains(": Moved")
+                || line.contains("copy-file")
+                || line.contains("delete-file")
+                || line.contains("move-file")
+        })
+        .count()
+}
 
 /// Sync engine that wraps rclone bisync for bidirectional synchronization.
 pub struct SyncEngine {
@@ -27,6 +71,7 @@ impl SyncEngine {
         app: &AppHandle,
         config: &AppConfig,
         token: &str,
+        source: &str,
     ) -> AppResult<()> {
         if !config.is_configured() {
             return Err(AppError::sync("Aplikacja nie jest skonfigurowana"));
@@ -39,6 +84,17 @@ impl SyncEngine {
             }
             *status = SyncStatus::Syncing;
         }
+
+        // Notify frontend that sync has started
+        let _ = app.emit(
+            "sync-progress",
+            SyncProgressPayload {
+                phase: "started".to_string(),
+                file_count: 0,
+                message: "Synchronizacja...".to_string(),
+                source: source.to_string(),
+            },
+        );
 
         // Ensure local directories exist (async to avoid blocking the runtime)
         tokio::fs::create_dir_all(&config.personal_sync_path)
@@ -90,8 +146,22 @@ impl SyncEngine {
 
         // Update status based on results
         match (&personal_result, &shared_result) {
-            (Ok(()), Ok(())) => {
+            (Ok(personal_count), Ok(shared_count)) => {
                 self.set_status(SyncStatus::Idle);
+                let total = personal_count + shared_count;
+                let _ = app.emit(
+                    "sync-progress",
+                    SyncProgressPayload {
+                        phase: "completed".to_string(),
+                        file_count: total,
+                        message: if total > 0 {
+                            format!("Zsynchronizowano {} plików", total)
+                        } else {
+                            "Wszystko aktualne".to_string()
+                        },
+                        source: source.to_string(),
+                    },
+                );
                 Ok(())
             }
             _ => {
@@ -112,6 +182,15 @@ impl SyncEngine {
                 .to_string();
 
                 self.set_status(SyncStatus::Error(error.clone()));
+                let _ = app.emit(
+                    "sync-progress",
+                    SyncProgressPayload {
+                        phase: "error".to_string(),
+                        file_count: 0,
+                        message: error.clone(),
+                        source: source.to_string(),
+                    },
+                );
                 Err(AppError::sync(error))
             }
         }
@@ -119,6 +198,7 @@ impl SyncEngine {
 
     /// Run rclone bisync between a WebDAV remote and a local directory.
     /// Auth credentials are passed via environment variables (not visible in /proc/pid/cmdline).
+    /// Returns the number of files transferred on success.
     async fn run_bisync(
         &self,
         app: &AppHandle,
@@ -126,7 +206,7 @@ impl SyncEngine {
         local_path: &str,
         username: &str,
         obscured_token: &str,
-    ) -> AppResult<()> {
+    ) -> AppResult<usize> {
         // Clean up any legacy in-directory marker from older versions —
         // rclone would try to upload it and nginx blocks dotfiles.
         let legacy_marker = Path::new(local_path).join(".veloryn-sync-init");
@@ -203,7 +283,9 @@ impl SyncEngine {
             if is_first_run {
                 let _ = std::fs::write(&first_run_marker, "initialized");
             }
-            Ok(())
+            let file_count = count_sync_operations(&stdout, &stderr);
+            log::info!("rclone bisync completed: {} file(s) transferred", file_count);
+            Ok(file_count)
         } else {
             let error = if stderr.is_empty() {
                 format!("rclone exited with code {:?}", output.status.code())

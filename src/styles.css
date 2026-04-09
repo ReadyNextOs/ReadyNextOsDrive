@@ -347,6 +347,72 @@ body {
   gap: 6px;
 }
 
+/* Sync toast notification */
+.sync-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: toast-slide-up 0.3s ease-out;
+  z-index: 1000;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sync-toast-info {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.sync-toast-success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.sync-toast-error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.sync-toast-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sync-toast-icon-info {
+  background: #1565c0;
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+
+.sync-toast-icon-success {
+  background: #2e7d32;
+}
+
+.sync-toast-icon-error {
+  background: #c62828;
+}
+
+@keyframes toast-slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 /* Update notification dot */
 .update-dot {
   position: absolute;

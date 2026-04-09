@@ -157,12 +157,12 @@ fn path_is_within(path: &Path, allowed_roots: &[PathBuf]) -> bool {
     allowed_roots.iter().any(|root| path.starts_with(root))
 }
 
-fn record_sync_attempt(state: &AppState, watch_triggered: bool) {
+fn record_sync_attempt(state: &AppState, source: &str) {
     let now = Instant::now();
     let mut scheduler = state.scheduler();
     scheduler.startup_sync_done = true;
     scheduler.last_sync_attempt = Some(now);
-    if watch_triggered {
+    if source == "watcher" {
         scheduler.last_watch_sync_attempt = Some(now);
     }
 }
@@ -211,14 +211,15 @@ fn configure_watcher_for_current_config(state: &AppState) -> AppResult<()> {
 async fn run_sync_once(
     app: &tauri::AppHandle,
     state: &AppState,
-    watch_triggered: bool,
+    source: &str,
 ) -> AppResult<()> {
     let cfg = state.config().clone();
     log::info!(
-        "run_sync_once: login={}, server={}, configured={}",
+        "run_sync_once: login={}, server={}, configured={}, source={}",
         cfg.user_login,
         cfg.server_url,
-        cfg.is_configured()
+        cfg.is_configured(),
+        source
     );
     if !cfg.is_configured() {
         return Err(AppError::sync("Aplikacja nie jest skonfigurowana"));
@@ -229,8 +230,11 @@ async fn run_sync_once(
         AppError::auth("Brak tokenu logowania")
     })?;
 
-    record_sync_attempt(state, watch_triggered);
-    state.sync_engine.sync_all(app, &cfg, &token.token).await
+    record_sync_attempt(state, source);
+    state
+        .sync_engine
+        .sync_all(app, &cfg, &token.token, source)
+        .await
 }
 
 async fn run_scheduler_tick(app: &tauri::AppHandle) {
@@ -266,7 +270,14 @@ async fn run_scheduler_tick(app: &tauri::AppHandle) {
         return;
     }
 
-    let result = run_sync_once(app, &state, should_watch_sync).await;
+    let source = if should_startup_sync {
+        "startup"
+    } else if should_watch_sync {
+        "watcher"
+    } else {
+        "interval"
+    };
+    let result = run_sync_once(app, &state, source).await;
 
     let mut scheduler = state.scheduler();
     if should_startup_sync {
@@ -432,7 +443,7 @@ fn update_config(
 /// Trigger manual sync
 #[tauri::command]
 async fn trigger_sync(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    run_sync_once(&app, &state, false)
+    run_sync_once(&app, &state, "manual")
         .await
         .map_err(|e| e.to_string())?;
 
@@ -708,7 +719,7 @@ fn handle_tray_menu_event(app: &AppHandle, event: MenuEvent) {
                     let engine = state.sync_engine.clone();
                     // Update tray icon to syncing
                     update_tray_icon(&app, &SyncStatus::Syncing);
-                    let result_status = match engine.sync_all(&app, &cfg, &token.token).await {
+                    let result_status = match engine.sync_all(&app, &cfg, &token.token, "manual").await {
                         Ok(()) => SyncStatus::Idle,
                         Err(_) => engine.get_status(),
                     };
