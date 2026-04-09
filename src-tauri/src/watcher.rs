@@ -1,15 +1,16 @@
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-use std::sync::mpsc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 
 /// File system watcher for detecting local changes.
 ///
-/// When a file changes locally, triggers an immediate sync
-/// instead of waiting for the next scheduled sync interval.
+/// When a file changes locally, sends a notification via an async channel
+/// so the scheduler can react immediately (Synology Drive-style).
 pub struct FileWatcher {
     watcher: Option<RecommendedWatcher>,
-    rx: Option<mpsc::Receiver<Result<Event, notify::Error>>>,
+    /// Async receiver — scheduler awaits this for instant reaction.
+    rx: Option<mpsc::Receiver<()>>,
 }
 
 impl FileWatcher {
@@ -21,12 +22,26 @@ impl FileWatcher {
     }
 
     /// Start watching the given directories for changes.
+    /// Returns a channel receiver that fires whenever a relevant file changes.
     pub fn start(&mut self, paths: &[&Path]) -> Result<(), String> {
-        let (tx, rx) = mpsc::channel();
+        // Bounded channel — if sync can't keep up, events coalesce (capacity 1).
+        let (tx, rx) = mpsc::channel::<()>(1);
 
         let mut watcher = RecommendedWatcher::new(
-            move |res| {
-                let _ = tx.send(res);
+            move |res: Result<Event, notify::Error>| {
+                if let Ok(event) = res {
+                    // Only trigger on real content changes, not metadata-only.
+                    if matches!(
+                        event.kind,
+                        EventKind::Create(_)
+                            | EventKind::Modify(notify::event::ModifyKind::Data(_))
+                            | EventKind::Modify(notify::event::ModifyKind::Name(_))
+                            | EventKind::Remove(_)
+                    ) {
+                        // try_send: if channel is full (sync already pending), skip.
+                        let _ = tx.try_send(());
+                    }
+                }
             },
             Config::default().with_poll_interval(Duration::from_secs(2)),
         )
@@ -57,18 +72,17 @@ impl FileWatcher {
         self.watcher.is_some()
     }
 
-    /// Check if there are pending file change events.
-    /// Returns true if changes were detected.
-    pub fn has_changes(&self) -> bool {
-        if let Some(rx) = &self.rx {
-            // Non-blocking check for events
+    /// Take the async receiver. The scheduler loop owns it and awaits on it
+    /// for instant reaction to file changes.
+    pub fn take_receiver(&mut self) -> Option<mpsc::Receiver<()>> {
+        self.rx.take()
+    }
+
+    /// Check if there are pending file change events (non-blocking, legacy).
+    pub fn has_changes(&mut self) -> bool {
+        if let Some(rx) = &mut self.rx {
             match rx.try_recv() {
-                Ok(Ok(event)) => {
-                    log::debug!("File change detected: {:?}", event.kind);
-                    // Drain any remaining events
-                    while rx.try_recv().is_ok() {}
-                    true
-                }
+                Ok(()) => true,
                 _ => false,
             }
         } else {

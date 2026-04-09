@@ -237,55 +237,99 @@ async fn run_sync_once(
         .await
 }
 
-async fn run_scheduler_tick(app: &tauri::AppHandle) {
-    let state = app.state::<AppState>();
-    let cfg = state.config().clone();
-    if !cfg.is_configured() {
-        return;
-    }
+/// Sync scheduler loop — reacts instantly to file changes (Synology Drive-style)
+/// instead of polling on a fixed interval.
+///
+/// Uses `tokio::select!` to await whichever fires first:
+///   - watcher channel (file changed locally → sync immediately after debounce)
+///   - interval timer (periodic full sync as safety net)
+///   - startup trigger (first sync after login)
+async fn run_scheduler_loop(app: tauri::AppHandle) {
+    // Take the watcher receiver so we can await on it directly.
+    let mut watcher_rx: Option<tokio::sync::mpsc::Receiver<()>> = {
+        let state = app.state::<AppState>();
+        let mut watcher = state.watcher();
+        watcher.take_receiver()
+    };
 
-    let now = Instant::now();
-    let (should_startup_sync, should_interval_sync, should_watch_sync) = {
-        let scheduler = state.scheduler();
-        let startup = cfg.sync_on_startup && !scheduler.startup_sync_done;
-        let interval_due = scheduler
-            .last_sync_attempt
-            .map(|last| now.duration_since(last) >= Duration::from_secs(cfg.sync_interval_secs))
-            .unwrap_or(false);
-        let watch_interval_due = scheduler
-            .last_watch_sync_attempt
-            .map(|last| now.duration_since(last) >= Duration::from_secs(5))
-            .unwrap_or(true);
-        drop(scheduler);
-        let watch_has_changes = {
-            let watcher = state.watcher();
-            watcher.is_running() && watcher.has_changes()
+    // Debounce: after detecting a file change, wait this long for more
+    // changes to settle before triggering sync (e.g. user copying 10 files).
+    const WATCHER_DEBOUNCE: Duration = Duration::from_secs(2);
+
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        // Wait for either: interval tick, file change, or both.
+        let source = if let Some(rx) = &mut watcher_rx {
+            tokio::select! {
+                _ = interval.tick() => "interval_or_startup",
+                _ = rx.recv() => {
+                    // Debounce: wait a bit for more changes to settle,
+                    // draining any events that arrive during the window.
+                    tokio::time::sleep(WATCHER_DEBOUNCE).await;
+                    while rx.try_recv().is_ok() {}
+                    "watcher"
+                }
+            }
+        } else {
+            interval.tick().await;
+            "interval_or_startup"
         };
-        let watch_due = cfg.watch_local_changes && watch_has_changes && watch_interval_due;
-        (startup, interval_due, watch_due)
-    };
 
-    let should_sync = should_startup_sync || should_interval_sync || should_watch_sync;
-    if !should_sync {
-        return;
-    }
+        let state = app.state::<AppState>();
+        let cfg = state.config().clone();
+        if !cfg.is_configured() {
+            continue;
+        }
 
-    let source = if should_startup_sync {
-        "startup"
-    } else if should_watch_sync {
-        "watcher"
-    } else {
-        "interval"
-    };
-    let result = run_sync_once(app, &state, source).await;
+        // Determine what kind of sync to run.
+        let now = Instant::now();
+        let final_source = if source == "watcher" {
+            // Watcher-triggered: skip if too soon after last watcher sync
+            let too_soon = {
+                let scheduler = state.scheduler();
+                scheduler
+                    .last_watch_sync_attempt
+                    .map(|last| now.duration_since(last) < Duration::from_secs(3))
+                    .unwrap_or(false)
+            };
+            if too_soon {
+                continue;
+            }
+            "watcher"
+        } else {
+            // Interval tick — check if startup or interval sync is due
+            let (should_startup, should_interval) = {
+                let scheduler = state.scheduler();
+                let startup = cfg.sync_on_startup && !scheduler.startup_sync_done;
+                let interval_due = scheduler
+                    .last_sync_attempt
+                    .map(|last| {
+                        now.duration_since(last) >= Duration::from_secs(cfg.sync_interval_secs)
+                    })
+                    .unwrap_or(false);
+                (startup, interval_due)
+            };
 
-    let mut scheduler = state.scheduler();
-    if should_startup_sync {
-        scheduler.startup_sync_done = true;
-    }
+            if should_startup {
+                "startup"
+            } else if should_interval {
+                "interval"
+            } else {
+                continue;
+            }
+        };
 
-    if let Err(err) = result {
-        log::warn!("Background sync failed: {}", err);
+        let result = run_sync_once(&app, &state, final_source).await;
+
+        if final_source == "startup" {
+            let mut scheduler = state.scheduler();
+            scheduler.startup_sync_done = true;
+        }
+
+        if let Err(err) = result {
+            log::warn!("Background sync failed: {}", err);
+        }
     }
 }
 
@@ -837,13 +881,7 @@ fn main() {
 
             {
                 let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut interval = tokio::time::interval(Duration::from_secs(5));
-                    loop {
-                        interval.tick().await;
-                        run_scheduler_tick(&handle).await;
-                    }
-                });
+                tauri::async_runtime::spawn(run_scheduler_loop(handle));
             }
 
             // Background update check — once per day
