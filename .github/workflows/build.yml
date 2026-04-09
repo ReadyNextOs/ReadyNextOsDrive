@@ -125,6 +125,18 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      # --- Decode Tauri updater signing key (base64-encoded to preserve newlines) ---
+      - name: Decode Tauri signing key
+        shell: bash
+        env:
+          TAURI_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          echo -n "$TAURI_KEY_B64" | base64 -d > $RUNNER_TEMP/tauri-signing.key
+          echo "TAURI_SIGNING_PRIVATE_KEY<<ENDOFKEY" >> $GITHUB_ENV
+          cat $RUNNER_TEMP/tauri-signing.key >> $GITHUB_ENV
+          echo "ENDOFKEY" >> $GITHUB_ENV
+          rm -f $RUNNER_TEMP/tauri-signing.key
+
       # --- Apple certificate (macOS only) ---
       - name: Import Apple Developer certificate
         if: runner.os == 'macOS'
@@ -157,8 +169,8 @@ jobs:
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # TAURI_SIGNING_PRIVATE_KEY is set via GITHUB_ENV in "Decode Tauri signing key" step
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
           # Prevent linuxdeploy strip errors on newer ELF binaries (.relr.dyn sections)
           NO_STRIP: ${{ startsWith(matrix.platform, 'ubuntu') && '1' || '' }}
           # macOS code signing — certificate already imported in earlier step;
