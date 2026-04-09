@@ -125,17 +125,6 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      # --- Assemble Tauri updater signing key from two secrets (newline-safe) ---
-      - name: Assemble Tauri signing key
-        shell: bash
-        run: |
-          {
-            echo "TAURI_SIGNING_PRIVATE_KEY<<TAURI_KEY_EOF"
-            echo "${{ secrets.TAURI_KEY_COMMENT }}"
-            echo "${{ secrets.TAURI_KEY_BASE64 }}"
-            echo "TAURI_KEY_EOF"
-          } >> "$GITHUB_ENV"
-
       # --- Apple certificate (macOS only) ---
       - name: Import Apple Developer certificate
         if: runner.os == 'macOS'
@@ -164,38 +153,53 @@ jobs:
           echo -n "$APPLE_API_KEY_CONTENT" > ~/private_keys/AuthKey_${APPLE_API_KEY}.p8
 
       # --- Build with Tauri ---
-      - uses: tauri-apps/tauri-action@v0
-        id: tauri
+      - name: Build Tauri app
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # TAURI_SIGNING_PRIVATE_KEY set via GITHUB_ENV in "Assemble Tauri signing key" step
+          TAURI_KEY_COMMENT: ${{ secrets.TAURI_KEY_COMMENT }}
+          TAURI_KEY_BASE64: ${{ secrets.TAURI_KEY_BASE64 }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
-          # Prevent linuxdeploy strip errors on newer ELF binaries (.relr.dyn sections)
           NO_STRIP: ${{ startsWith(matrix.platform, 'ubuntu') && '1' || '' }}
-          # macOS code signing — certificate already imported in earlier step;
-          # only pass identity so Tauri finds it in the keychain without re-importing.
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # macOS notarization
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
-        with:
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-          tagName: v__VERSION__
-          releaseName: 'Veloryn CloudFile v__VERSION__'
-          releaseBody: |
-            ## Veloryn CloudFile v__VERSION__
+        run: |
+          printf '%s\n%s\n' "$TAURI_KEY_COMMENT" "$TAURI_KEY_BASE64" > "$RUNNER_TEMP/tauri.key"
+          export TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/tauri.key")"
+          rm -f "$RUNNER_TEMP/tauri.key"
+          npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
-            Klient synchronizacji plików.
+      # --- Create GitHub Release ---
+      - name: Get app version
+        id: version
+        shell: bash
+        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> $GITHUB_OUTPUT
 
-            ### Instalacja
-            - **Windows**: Pobierz `.msi` i uruchom instalator
-            - **macOS**: Pobierz `.dmg`, otwórz i przeciągnij do Aplikacji
-            - **Linux (Debian/Ubuntu)**: Pobierz `.deb` i zainstaluj: `sudo dpkg -i *.deb`
-            - **Linux (uniwersalny)**: Pobierz `.AppImage`, nadaj uprawnienia `chmod +x` i uruchom
-          releaseDraft: false
-          prerelease: false
-          includeRelease: ${{ github.event.inputs.create_release == 'true' || github.event_name == 'push' }}
+      - name: Create or update release
+        if: github.event.inputs.create_release == 'true' || github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          gh release create "$TAG" \
+            --title "Veloryn CloudFile $TAG" \
+            --notes "## Veloryn CloudFile $TAG
+
+          Klient synchronizacji plików.
+
+          ### Instalacja
+          - **Windows**: Pobierz \`.msi\` i uruchom instalator
+          - **macOS**: Pobierz \`.dmg\`, otwórz i przeciągnij do Aplikacji
+          - **Linux (Debian/Ubuntu)**: Pobierz \`.deb\` i zainstaluj: \`sudo dpkg -i *.deb\`
+          - **Linux (uniwersalny)**: Pobierz \`.AppImage\`, nadaj uprawnienia \`chmod +x\` i uruchom" \
+            2>/dev/null || true
+          # Upload artifacts to release
+          find src-tauri/target/${{ matrix.target }}/release/bundle -type f \
+            \( -name "*.msi" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \
+               -o -name "*.sig" -o -name "*.json" -o -name "*.tar.gz" -o -name "*.zip" \) \
+            -exec gh release upload "$TAG" {} --clobber \;
 
       # --- Cleanup Apple certificate ---
       - name: Cleanup Apple signing artifacts
