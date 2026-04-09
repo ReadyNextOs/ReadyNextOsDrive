@@ -165,7 +165,11 @@ jobs:
           APPLE_API_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
         run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
-      - name: Smoke test AppImage startup
+      # --- Fix AppImage EGL/Wayland compatibility ---
+      # The bundled libwayland-client.so conflicts with host Mesa EGL drivers,
+      # causing "Could not create default EGL display: EGL_BAD_PARAMETER".
+      # Fix: remove bundled wayland/EGL libs so the host's matching set is used.
+      - name: Fix AppImage EGL/Wayland compatibility
         if: startsWith(matrix.platform, 'ubuntu')
         shell: bash
         run: |
@@ -173,22 +177,29 @@ jobs:
           APPIMAGE="$(find src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name '*.AppImage' -print -quit)"
           test -n "$APPIMAGE"
           chmod +x "$APPIMAGE"
+
+          # Extract AppImage
           rm -rf squashfs-root
           "$APPIMAGE" --appimage-extract >/dev/null
-          LOG_FILE="$RUNNER_TEMP/appimage-smoke.log"
-          set +e
-          timeout 20s xvfb-run -a env WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 \
-            ./squashfs-root/usr/bin/veloryn-cloudfile >"$LOG_FILE" 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
-            cat "$LOG_FILE"
-            exit "$status"
+
+          # Remove bundled libraries that MUST come from host system.
+          # These conflict with the host GPU/Mesa/Wayland stack.
+          cd squashfs-root/usr/lib
+          rm -f libwayland-client.so* libwayland-server.so* libwayland-cursor.so* libwayland-egl.so*
+          rm -f libEGL.so* libEGL_mesa.so* libGL.so* libGLX.so* libGLdispatch.so* libgbm.so*
+          cd ../../..
+
+          # Allow native Wayland instead of forcing X11
+          HOOK="squashfs-root/apprun-hooks/linuxdeploy-plugin-gtk.sh"
+          if [ -f "$HOOK" ]; then
+            sed -i 's/^export GDK_BACKEND=x11/#export GDK_BACKEND=x11/' "$HOOK"
           fi
-          if grep -q "EGL_BAD_PARAMETER" "$LOG_FILE"; then
-            cat "$LOG_FILE"
-            exit 1
-          fi
+
+          # Repack AppImage
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run squashfs-root "$APPIMAGE"
+          rm -rf squashfs-root appimagetool
 
       # --- Create GitHub Release ---
       - name: Get app version

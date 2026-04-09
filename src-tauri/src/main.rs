@@ -729,24 +729,14 @@ fn handle_tray_menu_event(app: &AppHandle, event: MenuEvent) {
 // ==================== Main ====================
 
 fn main() {
-    // Workaround for WebKitGTK EGL crashes on Linux (Wayland + various GPUs)
-    // Must be set before GTK/WebKit initialization — env vars are read during
-    // webview creation, NOT at process start.
+    // Safety net for WebKitGTK on Linux — disable DMA-BUF renderer to avoid
+    // edge-case GPU issues. The main EGL fix is in the AppImage packaging
+    // (bundled wayland/EGL libs are removed so the host's matching set is used).
     // SAFETY: env vars set before any threads are spawned (single-threaded at this point)
     #[cfg(target_os = "linux")]
     {
-        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        }
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        }
-        // Force Mesa software rendering to prevent EGL_BAD_PARAMETER on GPUs
-        // that don't expose a compatible EGL display (common on Wayland).
-        // Keep these vars for the whole process lifetime so WebKit subprocesses
-        // spawned after reload inherit the same renderer workaround.
-        if std::env::var("LIBGL_ALWAYS_SOFTWARE").is_err() {
-            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
         }
     }
 
