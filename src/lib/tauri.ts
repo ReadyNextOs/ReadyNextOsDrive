@@ -80,6 +80,10 @@ export async function getDebugInfo(): Promise<[boolean, string]> {
   return invoke<[boolean, string]>('get_debug_info');
 }
 
+export async function openLogFile(): Promise<void> {
+  await invoke('open_log_file');
+}
+
 export async function setDebugMode(enabled: boolean): Promise<void> {
   await invoke('set_debug_mode', { enabled });
 }

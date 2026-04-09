@@ -478,6 +478,17 @@ fn get_debug_info(state: State<'_, AppState>) -> (bool, String) {
     )
 }
 
+/// Open the current log file in the system default app
+#[tauri::command]
+fn open_log_file(state: State<'_, AppState>) -> Result<(), String> {
+    let log_path = normalize_existing_path(&state.log_path).map_err(|e| e.to_string())?;
+    if !log_path.is_file() {
+        return Err("Plik logu nie istnieje".to_string());
+    }
+
+    open::that(&log_path).map_err(|e| format!("Nie udało się otworzyć pliku logu: {}", e))
+}
+
 /// Toggle debug mode
 #[tauri::command]
 fn set_debug_mode(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
@@ -795,6 +806,7 @@ fn main() {
             open_folder,
             pick_folder,
             get_debug_info,
+            open_log_file,
             set_debug_mode,
             get_log_contents,
         ])

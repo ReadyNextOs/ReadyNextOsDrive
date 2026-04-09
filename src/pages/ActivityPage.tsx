@@ -3,6 +3,7 @@ import { getActivity, type ActivityEntry } from '@/lib/tauri';
 
 export default function ActivityPage() {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +34,32 @@ export default function ActivityPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!copiedKey) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
+
+    return () => window.clearTimeout(timeout);
+  }, [copiedKey]);
+
+  const handleCopyError = async (entry: ActivityEntry) => {
+    if (!entry.details) {
+      return;
+    }
+
+    const key = getEntryKey(entry);
+    try {
+      await navigator.clipboard.writeText(entry.details);
+      setCopiedKey(key);
+    } catch (err) {
+      console.error('Failed to copy error details:', err);
+    }
+  };
+
   return (
     <div className="container">
       <div className="card">
@@ -47,7 +74,7 @@ export default function ActivityPage() {
         )}
 
         {entries.map((entry) => (
-          <div className="activity-item" key={`${entry.timestamp}-${entry.action}-${entry.file_path}`}>
+          <div className="activity-item" key={getEntryKey(entry)}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontWeight: 500 }}>
                 {formatAction(entry.action)}
@@ -61,9 +88,23 @@ export default function ActivityPage() {
                 {entry.file_path}
               </div>
             )}
-            {entry.details && (
-              <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 2 }}>
-                {entry.details}
+            {entry.status !== 'success' && (
+              <div className="activity-error-row">
+                <span className="activity-error-summary">
+                  {getErrorSummary(entry)}
+                </span>
+                {entry.details && (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => void handleCopyError(entry)}
+                    title="Kopiuj szczegóły błędu"
+                    aria-label="Kopiuj szczegóły błędu"
+                  >
+                    <ClipboardIcon />
+                    <span>{copiedKey === getEntryKey(entry) ? 'Skopiowano' : 'Kopiuj błąd'}</span>
+                  </button>
+                )}
               </div>
             )}
             <div className="activity-time">
@@ -73,6 +114,29 @@ export default function ActivityPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+function getErrorSummary(entry: ActivityEntry): string {
+  if (entry.status === 'success') {
+    return '';
+  }
+
+  return `Błąd: ${formatAction(entry.action)}`;
+}
+
+function getEntryKey(entry: ActivityEntry): string {
+  return `${entry.timestamp}-${entry.action}-${entry.file_path}`;
+}
+
+function ClipboardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M16 4h-1.18A3 3 0 0 0 12 2a3 3 0 0 0-2.82 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm-4-1a1 1 0 0 1 .96.73l.1.27H10.94l.1-.27A1 1 0 0 1 12 3Zm4 15H8V6h1v1h6V6h1v12Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 

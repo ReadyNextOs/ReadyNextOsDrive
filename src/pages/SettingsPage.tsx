@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react';
-import { getConfig, updateConfig, logout, pickFolder, getDebugInfo, setDebugMode, getLogContents, type AppConfig } from '@/lib/tauri';
+import { getConfig, updateConfig, logout, pickFolder, getDebugInfo, openLogFile, setDebugMode, getLogContents, type AppConfig } from '@/lib/tauri';
 
 interface SettingsPageProps {
   onLogout: () => void;
@@ -13,6 +13,7 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [logPath, setLogPath] = useState('');
   const [logContents, setLogContents] = useState<string | null>(null);
+  const [diagnosticsMessage, setDiagnosticsMessage] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -231,17 +232,23 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
             Logi: {logPath}
           </p>
 
+          {diagnosticsMessage && (
+            <p style={{ fontSize: 11, marginBottom: 6, color: 'var(--color-error)' }}>
+              {diagnosticsMessage}
+            </p>
+          )}
+
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <button
             type="button"
             className="btn btn-outline btn-sm"
             style={{ flex: 1 }}
             onClick={async () => {
+              setDiagnosticsMessage('');
               try {
-                const { open } = await import('@tauri-apps/plugin-shell');
-                await open(logPath);
+                await openLogFile();
               } catch (err) {
-                console.error('Failed to open log file:', err);
+                setDiagnosticsMessage(`Nie udało się otworzyć pliku logu: ${err}`);
               }
             }}
           >
@@ -253,6 +260,7 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
             className="btn btn-outline btn-sm"
             style={{ flex: 1 }}
             onClick={async () => {
+              setDiagnosticsMessage('');
               try {
                 const contents = await getLogContents(100);
                 setLogContents(contents);
