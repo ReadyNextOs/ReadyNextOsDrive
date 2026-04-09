@@ -125,18 +125,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      # --- Decode Tauri updater signing key (base64-encoded to preserve newlines) ---
-      - name: Decode Tauri signing key
-        id: decode-key
+      # --- Assemble Tauri updater signing key from two secrets (newline-safe) ---
+      - name: Assemble Tauri signing key
         shell: bash
-        env:
-          TAURI_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          echo -n "$TAURI_KEY_B64" | base64 -d > $RUNNER_TEMP/tauri-signing.key
-          echo "key<<ENDOFKEY" >> $GITHUB_OUTPUT
-          cat $RUNNER_TEMP/tauri-signing.key >> $GITHUB_OUTPUT
-          echo "ENDOFKEY" >> $GITHUB_OUTPUT
-          rm -f $RUNNER_TEMP/tauri-signing.key
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY<<TAURI_KEY_EOF"
+            echo "${{ secrets.TAURI_KEY_COMMENT }}"
+            echo "${{ secrets.TAURI_KEY_BASE64 }}"
+            echo "TAURI_KEY_EOF"
+          } >> "$GITHUB_ENV"
 
       # --- Apple certificate (macOS only) ---
       - name: Import Apple Developer certificate
@@ -170,7 +168,7 @@ jobs:
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.decode-key.outputs.key }}
+          # TAURI_SIGNING_PRIVATE_KEY set via GITHUB_ENV in "Assemble Tauri signing key" step
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
           # Prevent linuxdeploy strip errors on newer ELF binaries (.relr.dyn sections)
           NO_STRIP: ${{ startsWith(matrix.platform, 'ubuntu') && '1' || '' }}
