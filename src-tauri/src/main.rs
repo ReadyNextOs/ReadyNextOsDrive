@@ -607,9 +607,9 @@ fn handle_tray_menu_event(app: &AppHandle, event: MenuEvent) {
 // ==================== Main ====================
 
 fn main() {
-    // Workaround for WebKitGTK EGL crashes on Linux (Intel Iris Xe + Wayland)
-    // Step 1: COMPOSITING_MODE=1 prevents EGL init crash during webview creation
-    // Step 2: In setup(), we set HardwareAccelerationPolicy::Never and reload
+    // Workaround for WebKitGTK EGL crashes on Linux (Wayland + various GPUs)
+    // Must be set before GTK/WebKit initialization — env vars are read during
+    // webview creation, NOT at process start.
     // SAFETY: env vars set before any threads are spawned (single-threaded at this point)
     #[cfg(target_os = "linux")]
     {
@@ -619,9 +619,11 @@ fn main() {
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
-        // Remove immediately — WebKit reads env on process start, subprocesses
-        // spawned later (rclone) should not inherit these.
-        std::env::remove_var("WEBKIT_DISABLE_COMPOSITING_MODE");
+        // Force Mesa software rendering to prevent EGL_BAD_PARAMETER on GPUs
+        // that don't expose a compatible EGL display (common on Wayland)
+        if std::env::var("LIBGL_ALWAYS_SOFTWARE").is_err() {
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        }
     }
 
     // Setup log file in app data directory
@@ -748,6 +750,11 @@ fn main() {
                     // Reload page — new subprocess uses software rendering (no EGL)
                     let _ = window.eval("setTimeout(() => window.location.reload(), 100)");
                 }
+
+                // Clean up GPU env vars now that webview is created —
+                // subprocesses like rclone should not inherit these.
+                std::env::remove_var("WEBKIT_DISABLE_COMPOSITING_MODE");
+                std::env::remove_var("LIBGL_ALWAYS_SOFTWARE");
             }
 
             // Setup tray icon with expanded menu

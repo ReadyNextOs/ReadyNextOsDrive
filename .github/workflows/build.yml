@@ -131,6 +131,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # Prevent linuxdeploy strip errors on newer ELF binaries (.relr.dyn sections)
+          NO_STRIP: ${{ startsWith(matrix.platform, 'ubuntu') && '1' || '' }}
         with:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           tagName: v__VERSION__
