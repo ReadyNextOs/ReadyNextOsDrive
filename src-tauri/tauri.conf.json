@@ -57,7 +57,7 @@
       "open": true
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMzQjlBRjlGRDNDQTYxRDIKUldUU1ljclRuNis1TTluY3ZqTjlFN2FaVFNPcHVqTW9IRFR3QkxFL083ejJJaEdQdU5STVk3SVUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ1MzdDREQwMEIzRTI1MTkKUldRWkpUNEwwTTAzMWV6ejA2RDN3S01xZU56ZzZrR0NabSsrOUNwOFhqZlhNZjUrWmlhU3BYQ3IK",
       "endpoints": [
         "https://github.com/ReadyNextOs/ReadyNextOsDrive/releases/latest/download/latest.json"
       ],
