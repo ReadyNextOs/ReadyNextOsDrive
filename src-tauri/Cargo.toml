@@ -30,6 +30,8 @@ log = "0.4"
 simplelog = "0.12"
 open = "5"
 base64 = "0.22"
+urlencoding = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "2.0", features = ["v2_22"] }

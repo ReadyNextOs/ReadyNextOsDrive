@@ -3,8 +3,12 @@
 
 mod auth;
 mod config;
+mod db;
+mod diff;
 mod error;
 mod sync;
+mod transfer;
+mod trash;
 mod watcher;
 
 use config::{ActivityEntry, AppConfig, SyncStatus};
