@@ -168,6 +168,9 @@ jobs:
           printf '%s\n%s\n' "$TAURI_KEY_COMMENT" "$TAURI_KEY_BASE64" > "$RUNNER_TEMP/tauri.key"
           export TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/tauri.key")"
           rm -f "$RUNNER_TEMP/tauri.key"
+          echo "DEBUG: key line count=$(echo "$TAURI_SIGNING_PRIVATE_KEY" | wc -l)"
+          echo "DEBUG: key line1 prefix=$(echo "$TAURI_SIGNING_PRIVATE_KEY" | head -1 | cut -c1-20)"
+          echo "DEBUG: key line2 prefix=$(echo "$TAURI_SIGNING_PRIVATE_KEY" | tail -1 | cut -c1-10)"
           npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       # --- Create GitHub Release ---
