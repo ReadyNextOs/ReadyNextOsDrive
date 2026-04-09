@@ -285,21 +285,80 @@ impl SyncEngine {
             }
             let file_count = count_sync_operations(&stdout, &stderr);
             log::info!("rclone bisync completed: {} file(s) transferred", file_count);
-            Ok(file_count)
-        } else {
-            let error = if stderr.is_empty() {
-                format!("rclone exited with code {:?}", output.status.code())
-            } else {
-                stderr.to_string()
-            };
+            return Ok(file_count);
+        }
 
-            // Check for conflicts
-            if error.contains("CONFLICT") || error.contains("conflict") {
-                self.set_status(SyncStatus::Conflict);
+        let error = if stderr.is_empty() {
+            format!("rclone exited with code {:?}", output.status.code())
+        } else {
+            stderr.to_string()
+        };
+
+        // Auto-resync: if rclone aborted due to too many deletes, retry with --resync
+        // to establish a new baseline (e.g. after data source change on server).
+        if !is_first_run
+            && (error.contains("too many deletes") || error.contains("Safety abort"))
+        {
+            log::warn!(
+                "Safety abort detected for {}, auto-retrying with --resync",
+                webdav_url
+            );
+
+            if let Some(pos) = args.iter().position(|a| *a == "--recover") {
+                args[pos] = "--resync";
             }
 
-            Err(AppError::sync(error))
+            let resync_output = tokio::time::timeout(
+                Duration::from_secs(1800),
+                app.shell()
+                    .sidecar("sidecars/rclone")
+                    .map_err(|e| {
+                        AppError::sync(format!("Failed to create rclone sidecar: {}", e))
+                    })?
+                    .args(&args)
+                    .env("RCLONE_WEBDAV_URL", webdav_url)
+                    .env("RCLONE_WEBDAV_USER", username)
+                    .env("RCLONE_WEBDAV_PASS", obscured_token)
+                    .output(),
+            )
+            .await
+            .map_err(|_| AppError::sync("Synchronizacja przekroczyła limit czasu"))?
+            .map_err(|e| AppError::sync(format!("Failed to run rclone: {}", e)))?;
+
+            let resync_stdout = String::from_utf8_lossy(&resync_output.stdout);
+            let resync_stderr = String::from_utf8_lossy(&resync_output.stderr);
+
+            log::debug!("rclone resync stdout: {}", resync_stdout);
+            if !resync_stderr.is_empty() {
+                log::warn!("rclone resync stderr: {}", resync_stderr);
+            }
+
+            if resync_output.status.success() {
+                let file_count = count_sync_operations(&resync_stdout, &resync_stderr);
+                log::info!(
+                    "rclone bisync auto-resync completed: {} file(s) transferred",
+                    file_count
+                );
+                return Ok(file_count);
+            }
+
+            let resync_error = if resync_stderr.is_empty() {
+                format!(
+                    "rclone resync exited with code {:?}",
+                    resync_output.status.code()
+                )
+            } else {
+                resync_stderr.to_string()
+            };
+            return Err(AppError::sync(resync_error));
         }
+
+        // Check for conflicts
+        if error.contains("CONFLICT") || error.contains("conflict") {
+            self.set_status(SyncStatus::Conflict);
+        }
+
+        Err(AppError::sync(error))
     }
 
     /// Obscure a password for rclone (rclone uses its own obscure format).
