@@ -11,7 +11,7 @@ use tauri_plugin_shell::ShellExt;
 /// to system-installed rclone if the sidecar binary is missing.
 fn rclone_command(app: &AppHandle) -> tauri_plugin_shell::process::Command {
     // Try bundled sidecar first
-    match app.shell().sidecar("sidecars/rclone") {
+    match app.shell().sidecar("rclone") {
         Ok(cmd) => {
             log::debug!("Using bundled rclone sidecar");
             cmd

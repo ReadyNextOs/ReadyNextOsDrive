@@ -89,22 +89,20 @@ jobs:
       - name: Download rclone sidecar (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p src-tauri/sidecars
           curl -fsSL "https://downloads.rclone.org/v${{ env.RCLONE_VERSION }}/rclone-v${{ env.RCLONE_VERSION }}-${{ matrix.rclone_os }}-${{ matrix.rclone_arch }}.zip" -o rclone.zip
           unzip -o rclone.zip
           cp "rclone-v${{ env.RCLONE_VERSION }}-${{ matrix.rclone_os }}-${{ matrix.rclone_arch }}/rclone" \
-             "src-tauri/sidecars/rclone${{ matrix.sidecar_suffix }}"
-          chmod +x "src-tauri/sidecars/rclone${{ matrix.sidecar_suffix }}"
+             "src-tauri/rclone${{ matrix.sidecar_suffix }}"
+          chmod +x "src-tauri/rclone${{ matrix.sidecar_suffix }}"
           rm -rf rclone.zip rclone-v*
 
       - name: Download rclone sidecar (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path src-tauri\sidecars | Out-Null
           Invoke-WebRequest -Uri "https://downloads.rclone.org/v${{ env.RCLONE_VERSION }}/rclone-v${{ env.RCLONE_VERSION }}-windows-amd64.zip" -OutFile rclone.zip
           Expand-Archive -Path rclone.zip -DestinationPath . -Force
-          Copy-Item "rclone-v${{ env.RCLONE_VERSION }}-windows-amd64\rclone.exe" "src-tauri\sidecars\rclone${{ matrix.sidecar_suffix }}"
+          Copy-Item "rclone-v${{ env.RCLONE_VERSION }}-windows-amd64\rclone.exe" "src-tauri\rclone${{ matrix.sidecar_suffix }}"
           Remove-Item rclone.zip, "rclone-v*" -Recurse -Force
 
       # --- Validate icons exist ---
