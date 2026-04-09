@@ -329,11 +329,7 @@ impl SyncEngine {
 
             let resync_output = tokio::time::timeout(
                 Duration::from_secs(1800),
-                app.shell()
-                    .sidecar("sidecars/rclone")
-                    .map_err(|e| {
-                        AppError::sync(format!("Failed to create rclone sidecar: {}", e))
-                    })?
+                rclone_command(app)
                     .args(&args)
                     .env("RCLONE_WEBDAV_URL", webdav_url)
                     .env("RCLONE_WEBDAV_USER", username)
