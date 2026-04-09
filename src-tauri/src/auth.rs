@@ -126,6 +126,7 @@ pub struct DesktopTokenConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginUser {
     pub id: String,
+    #[serde(alias = "email")]
     pub login: String,
     pub name: String,
     pub tenant_id: Option<String>,
@@ -169,12 +170,12 @@ pub async fn login(server_url: &str, login: &str, password: &str) -> AppResult<L
 pub async fn exchange_desktop_token(
     bootstrap_token: &str,
 ) -> AppResult<DesktopTokenExchangeResponse> {
-    let trimmed_token = bootstrap_token.trim();
+    let trimmed_token: String = bootstrap_token.chars().filter(|c| !c.is_whitespace()).collect();
     if trimmed_token.is_empty() {
         return Err(AppError::auth("Token jest wymagany"));
     }
 
-    let claims = decode_desktop_token_claims(trimmed_token)?;
+    let claims = decode_desktop_token_claims(&trimmed_token)?;
     let server_url = claims
         .server_url
         .ok_or_else(|| AppError::auth("Token desktopowy nie zawiera server_url"))?;

@@ -848,7 +848,8 @@ fn main() {
                 });
             }
 
-            // On Linux: disable hardware acceleration and reload to fix EGL blank page
+            // On Linux: disable hardware acceleration to avoid EGL/GPU issues.
+            // The WEBKIT_DISABLE_DMABUF_RENDERER env var is set at the top of main().
             #[cfg(target_os = "linux")]
             {
                 if let Some(window) = app.get_webview_window("main") {
@@ -864,9 +865,6 @@ fn main() {
                             }
                         })
                         .ok();
-
-                    // Reload page — new subprocess uses software rendering (no EGL)
-                    let _ = window.eval("setTimeout(() => window.location.reload(), 100)");
                 }
             }
 

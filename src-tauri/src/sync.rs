@@ -127,8 +127,28 @@ impl SyncEngine {
         username: &str,
         obscured_token: &str,
     ) -> AppResult<()> {
-        // Check if this is the first sync run
-        let first_run_marker = Path::new(local_path).join(".veloryn-sync-init");
+        // Clean up any legacy in-directory marker from older versions —
+        // rclone would try to upload it and nginx blocks dotfiles.
+        let legacy_marker = Path::new(local_path).join(".veloryn-sync-init");
+        if legacy_marker.exists() {
+            let _ = std::fs::remove_file(&legacy_marker);
+        }
+
+        // Check if this is the first sync run. Marker lives in the app data
+        // directory so rclone never tries to sync it.
+        let marker_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("com.veloryn.cloudfile")
+            .join("markers");
+        let _ = std::fs::create_dir_all(&marker_dir);
+        let marker_name = format!(
+            "sync-init-{}",
+            local_path
+                .replace(['/', '\\', ':', ' '], "_")
+                .trim_matches('_')
+                .to_string()
+        );
+        let first_run_marker = marker_dir.join(marker_name);
         let is_first_run = !first_run_marker.exists();
 
         let mut args = vec![
@@ -139,6 +159,12 @@ impl SyncEngine {
             "--resilient",
             "--conflict-resolve=newer",
             "--verbose",
+            // nginx on the Veloryn backend blocks all dotfiles (/\.(?!well-known)),
+            // so skip them entirely to avoid 403 errors during sync.
+            "--exclude",
+            ".*",
+            "--exclude",
+            ".*/**",
         ];
 
         if is_first_run {

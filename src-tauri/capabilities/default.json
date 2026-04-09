@@ -14,8 +14,15 @@
     "autostart:allow-is-enabled",
     "dialog:default",
     "shell:default",
-    "shell:allow-execute",
-    "shell:allow-spawn",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [{ "name": "sidecars/rclone", "sidecar": true, "args": true }]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "sidecars/rclone", "sidecar": true, "args": true }]
+    },
     "shell:allow-stdin-write",
     "shell:allow-kill",
     "updater:default",

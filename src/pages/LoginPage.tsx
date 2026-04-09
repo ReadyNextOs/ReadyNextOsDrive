@@ -1,5 +1,5 @@
 import { useState, useCallback, FormEvent } from 'react';
-import { login, loginWithToken } from '@/lib/tauri';
+import { login as performLogin, loginWithToken } from '@/lib/tauri';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
@@ -20,7 +20,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     setLoading(true);
 
     try {
-      await login(serverUrl, login, password);
+      await performLogin(serverUrl, login, password);
       onLoginSuccess();
     } catch (err) {
       setError(formatLoginError(err));
