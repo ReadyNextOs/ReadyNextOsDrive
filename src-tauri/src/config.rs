@@ -111,8 +111,9 @@ pub fn save_config(app: &AppHandle, config: &AppConfig) -> AppResult<()> {
     let store = app
         .store(STORE_FILE)
         .map_err(|e| AppError::config(format!("Nie udało się otworzyć store: {}", e)))?;
-    let value = serde_json::to_value(config)
-        .map_err(|e| AppError::config(format!("Nie udało się zserializować konfiguracji: {}", e)))?;
+    let value = serde_json::to_value(config).map_err(|e| {
+        AppError::config(format!("Nie udało się zserializować konfiguracji: {}", e))
+    })?;
     store.set(STORE_KEY.to_string(), value);
     store
         .save()

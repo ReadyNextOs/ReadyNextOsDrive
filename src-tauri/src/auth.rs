@@ -32,20 +32,22 @@ impl AuthToken {
 
 /// Store the auth token in the OS keychain.
 pub fn store_token(email: &str, token: &AuthToken) -> AppResult<()> {
-    log::info!("store_token: storing for email={}, type={:?}, expires_at={:?}", email, token.token_type, token.expires_at);
-    let entry = Entry::new(SERVICE_NAME, email)
-        .map_err(|e| {
-            log::error!("store_token: failed to create keychain entry: {}", e);
-            AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
-        })?;
+    log::info!(
+        "store_token: storing for email={}, type={:?}, expires_at={:?}",
+        email,
+        token.token_type,
+        token.expires_at
+    );
+    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| {
+        log::error!("store_token: failed to create keychain entry: {}", e);
+        AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
+    })?;
     let json = serde_json::to_string(token)
         .map_err(|e| AppError::auth(format!("Nie udało się zserializować tokenu: {}", e)))?;
-    entry
-        .set_password(&json)
-        .map_err(|e| {
-            log::error!("store_token: failed to save to keychain: {}", e);
-            AppError::auth(format!("Nie udało się zapisać tokenu: {}", e))
-        })?;
+    entry.set_password(&json).map_err(|e| {
+        log::error!("store_token: failed to save to keychain: {}", e);
+        AppError::auth(format!("Nie udało się zapisać tokenu: {}", e))
+    })?;
     log::info!("store_token: token saved successfully for {}", email);
     Ok(())
 }
@@ -53,18 +55,20 @@ pub fn store_token(email: &str, token: &AuthToken) -> AppResult<()> {
 /// Retrieve the auth token from the OS keychain.
 pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
     log::info!("get_token: looking up token for email={}", email);
-    let entry = Entry::new(SERVICE_NAME, email)
-        .map_err(|e| {
-            log::error!("get_token: failed to create keychain entry: {}", e);
-            AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
-        })?;
+    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| {
+        log::error!("get_token: failed to create keychain entry: {}", e);
+        AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
+    })?;
     match entry.get_password() {
         Ok(json) => {
             log::info!("get_token: found token in keychain (len={})", json.len());
             let token: AuthToken = serde_json::from_str(&json)
                 .map_err(|e| AppError::auth(format!("Nie udało się odczytać tokenu: {}", e)))?;
             if token.is_expired() {
-                log::warn!("get_token: token expired at {:?}, removing", token.expires_at);
+                log::warn!(
+                    "get_token: token expired at {:?}, removing",
+                    token.expires_at
+                );
                 let _ = entry.delete_credential();
                 Ok(None)
             } else {
@@ -78,7 +82,10 @@ pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
         }
         Err(e) => {
             log::error!("get_token: keychain error: {}", e);
-            Err(AppError::auth(format!("Nie udało się pobrać tokenu: {}", e)))
+            Err(AppError::auth(format!(
+                "Nie udało się pobrać tokenu: {}",
+                e
+            )))
         }
     }
 }
@@ -90,7 +97,10 @@ pub fn remove_token(email: &str) -> AppResult<()> {
     match entry.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(AppError::auth(format!("Nie udało się usunąć tokenu: {}", e))),
+        Err(e) => Err(AppError::auth(format!(
+            "Nie udało się usunąć tokenu: {}",
+            e
+        ))),
     }
 }
 
@@ -122,11 +132,7 @@ pub struct LoginUser {
 }
 
 /// Login with email and password, returns Sanctum API token.
-pub async fn login(
-    server_url: &str,
-    email: &str,
-    password: &str,
-) -> AppResult<LoginResponse> {
+pub async fn login(server_url: &str, email: &str, password: &str) -> AppResult<LoginResponse> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
@@ -218,11 +224,11 @@ fn decode_desktop_token_claims(token: &str) -> AppResult<DesktopTokenClaims> {
         .split('.')
         .nth(1)
         .ok_or_else(|| AppError::auth("Token desktopowy ma nieprawidłowy format"))?;
-    let decoded = base64::Engine::decode(
-        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-        payload,
-    )
-    .map_err(|e| AppError::auth(format!("Nieprawidłowy payload tokenu desktopowego: {}", e)))?;
+    let decoded =
+        base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload)
+            .map_err(|e| {
+                AppError::auth(format!("Nieprawidłowy payload tokenu desktopowego: {}", e))
+            })?;
 
     serde_json::from_slice::<DesktopTokenClaims>(&decoded)
         .map_err(|e| AppError::auth(format!("Nieprawidłowe claims tokenu desktopowego: {}", e)))

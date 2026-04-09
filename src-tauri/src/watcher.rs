@@ -28,8 +28,7 @@ impl FileWatcher {
             move |res| {
                 let _ = tx.send(res);
             },
-            Config::default()
-                .with_poll_interval(Duration::from_secs(2)),
+            Config::default().with_poll_interval(Duration::from_secs(2)),
         )
         .map_err(|e| format!("Failed to create watcher: {}", e))?;
 

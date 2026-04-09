@@ -41,17 +41,18 @@ impl SyncEngine {
         }
 
         // Ensure local directories exist (async to avoid blocking the runtime)
-        tokio::fs::create_dir_all(&config.personal_sync_path).await.map_err(|e| {
-            self.set_error_status(format!("Cannot create personal dir: {}", e))
-        })?;
-        tokio::fs::create_dir_all(&config.shared_sync_path).await.map_err(|e| {
-            self.set_error_status(format!("Cannot create shared dir: {}", e))
-        })?;
+        tokio::fs::create_dir_all(&config.personal_sync_path)
+            .await
+            .map_err(|e| self.set_error_status(format!("Cannot create personal dir: {}", e)))?;
+        tokio::fs::create_dir_all(&config.shared_sync_path)
+            .await
+            .map_err(|e| self.set_error_status(format!("Cannot create shared dir: {}", e)))?;
 
         // Obscure the token for rclone
-        let obscured_token = self.obscure_password(app, token).await.map_err(|e| {
-            self.set_error_status(e.to_string())
-        })?;
+        let obscured_token = self
+            .obscure_password(app, token)
+            .await
+            .map_err(|e| self.set_error_status(e.to_string()))?;
 
         // Sync personal files
         let personal_result = self
@@ -205,7 +206,9 @@ impl SyncEngine {
 
         child
             .write(format!("{}\n", password).as_bytes())
-            .map_err(|e| AppError::sync(format!("Failed to write password to rclone stdin: {}", e)))?;
+            .map_err(|e| {
+                AppError::sync(format!("Failed to write password to rclone stdin: {}", e))
+            })?;
 
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
@@ -216,7 +219,10 @@ impl SyncEngine {
                 CommandEvent::Stdout(line) => stdout.extend(line),
                 CommandEvent::Stderr(line) => stderr.extend(line),
                 CommandEvent::Error(err) => {
-                    return Err(AppError::sync(format!("Failed to obscure password: {}", err)));
+                    return Err(AppError::sync(format!(
+                        "Failed to obscure password: {}",
+                        err
+                    )));
                 }
                 CommandEvent::Terminated(payload) => {
                     exit_code = payload.code;
@@ -236,7 +242,10 @@ impl SyncEngine {
                     exit_code
                 )))
             } else {
-                Err(AppError::sync(format!("Failed to obscure password: {}", stderr)))
+                Err(AppError::sync(format!(
+                    "Failed to obscure password: {}",
+                    stderr
+                )))
             }
         }
     }
@@ -294,7 +303,9 @@ impl SyncEngine {
     }
 
     fn status_guard(&self) -> MutexGuard<'_, SyncStatus> {
-        self.status.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn activity_log_guard(&self) -> MutexGuard<'_, Vec<ActivityEntry>> {
