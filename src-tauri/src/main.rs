@@ -11,9 +11,9 @@ use config::{ActivityEntry, AppConfig, SyncStatus};
 use error::{AppError, AppResult};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
@@ -38,11 +38,15 @@ struct SchedulerState {
 
 impl AppState {
     fn config(&self) -> MutexGuard<'_, AppConfig> {
-        self.config.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.config
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn watcher(&self) -> MutexGuard<'_, watcher::FileWatcher> {
-        self.watcher.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.watcher
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn scheduler(&self) -> MutexGuard<'_, SchedulerState> {
@@ -78,15 +82,14 @@ fn validate_server_url(server_url: &str) -> AppResult<()> {
                     || ip.is_multicast()
             }
             IpAddr::V6(ip) => {
-                ip.is_loopback()
-                    || ip.is_unspecified()
-                    || ip.is_multicast()
-                    || ip.is_unique_local()
+                ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() || ip.is_unique_local()
             }
         };
 
         if blocked {
-            return Err(AppError::config("Adresy lokalne i prywatne nie są dozwolone"));
+            return Err(AppError::config(
+                "Adresy lokalne i prywatne nie są dozwolone",
+            ));
         }
     }
 
@@ -95,21 +98,29 @@ fn validate_server_url(server_url: &str) -> AppResult<()> {
 
 fn validate_sync_path(path: &Path) -> AppResult<()> {
     if path.as_os_str().is_empty() {
-        return Err(AppError::config("Ścieżka synchronizacji nie może być pusta"));
+        return Err(AppError::config(
+            "Ścieżka synchronizacji nie może być pusta",
+        ));
     }
 
     if !path.is_absolute() {
-        return Err(AppError::config("Ścieżka synchronizacji musi być bezwzględna"));
+        return Err(AppError::config(
+            "Ścieżka synchronizacji musi być bezwzględna",
+        ));
     }
 
     if path == Path::new("/") {
-        return Err(AppError::config("Nie można użyć katalogu głównego jako ścieżki synchronizacji"));
+        return Err(AppError::config(
+            "Nie można użyć katalogu głównego jako ścieżki synchronizacji",
+        ));
     }
 
     // Block Windows drive roots (C:\, D:\, etc.)
     #[cfg(target_os = "windows")]
     if path.parent().is_none() || path.as_os_str().len() <= 3 {
-        return Err(AppError::config("Nie można użyć katalogu głównego dysku jako ścieżki synchronizacji"));
+        return Err(AppError::config(
+            "Nie można użyć katalogu głównego dysku jako ścieżki synchronizacji",
+        ));
     }
 
     Ok(())
@@ -123,7 +134,9 @@ fn validate_config(config: &AppConfig) -> AppResult<()> {
     }
 
     if config.sync_interval_secs < 30 || config.sync_interval_secs > 3600 {
-        return Err(AppError::config("Interwał synchronizacji musi być w zakresie 30-3600 sekund"));
+        return Err(AppError::config(
+            "Interwał synchronizacji musi być w zakresie 30-3600 sekund",
+        ));
     }
 
     validate_sync_path(&config.personal_sync_path)?;
@@ -137,8 +150,7 @@ fn validate_config(config: &AppConfig) -> AppResult<()> {
 }
 
 fn normalize_existing_path(path: &Path) -> AppResult<PathBuf> {
-    std::fs::canonicalize(path)
-        .map_err(|e| AppError::io(format!("Nieprawidłowa ścieżka: {}", e)))
+    std::fs::canonicalize(path).map_err(|e| AppError::io(format!("Nieprawidłowa ścieżka: {}", e)))
 }
 
 fn path_is_within(path: &Path, allowed_roots: &[PathBuf]) -> bool {
@@ -181,26 +193,41 @@ fn configure_watcher_for_current_config(state: &AppState) -> AppResult<()> {
 
     std::fs::create_dir_all(&cfg.personal_sync_path)
         .map_err(|e| AppError::io(format!("Nie udało się utworzyć katalogu osobistego: {}", e)))?;
-    std::fs::create_dir_all(&cfg.shared_sync_path)
-        .map_err(|e| AppError::io(format!("Nie udało się utworzyć katalogu współdzielonego: {}", e)))?;
+    std::fs::create_dir_all(&cfg.shared_sync_path).map_err(|e| {
+        AppError::io(format!(
+            "Nie udało się utworzyć katalogu współdzielonego: {}",
+            e
+        ))
+    })?;
 
     watcher
-        .start(&[cfg.personal_sync_path.as_path(), cfg.shared_sync_path.as_path()])
+        .start(&[
+            cfg.personal_sync_path.as_path(),
+            cfg.shared_sync_path.as_path(),
+        ])
         .map_err(AppError::sync)
 }
 
-async fn run_sync_once(app: &tauri::AppHandle, state: &AppState, watch_triggered: bool) -> AppResult<()> {
+async fn run_sync_once(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    watch_triggered: bool,
+) -> AppResult<()> {
     let cfg = state.config().clone();
-    log::info!("run_sync_once: email={}, server={}, configured={}", cfg.user_email, cfg.server_url, cfg.is_configured());
+    log::info!(
+        "run_sync_once: email={}, server={}, configured={}",
+        cfg.user_email,
+        cfg.server_url,
+        cfg.is_configured()
+    );
     if !cfg.is_configured() {
         return Err(AppError::sync("Aplikacja nie jest skonfigurowana"));
     }
 
-    let token = auth::get_token(&cfg.user_email)?
-        .ok_or_else(|| {
-            log::error!("run_sync_once: no token in keychain for {}", cfg.user_email);
-            AppError::auth("Brak tokenu logowania")
-        })?;
+    let token = auth::get_token(&cfg.user_email)?.ok_or_else(|| {
+        log::error!("run_sync_once: no token in keychain for {}", cfg.user_email);
+        AppError::auth("Brak tokenu logowania")
+    })?;
 
     record_sync_attempt(state, watch_triggered);
     state.sync_engine.sync_all(app, &cfg, &token.token).await
@@ -230,9 +257,7 @@ async fn run_scheduler_tick(app: &tauri::AppHandle) {
             let watcher = state.watcher();
             watcher.is_running() && watcher.has_changes()
         };
-        let watch_due = cfg.watch_local_changes
-            && watch_has_changes
-            && watch_interval_due;
+        let watch_due = cfg.watch_local_changes && watch_has_changes && watch_interval_due;
         (startup, interval_due, watch_due)
     };
 
@@ -269,8 +294,15 @@ async fn login(
     let response = auth::login(&server_url, &email, &password)
         .await
         .map_err(|e| e.to_string())?;
-    persist_login(&app, &state, server_url, email, response.token, response.user)
-        .map_err(|e| e.to_string())
+    persist_login(
+        &app,
+        &state,
+        server_url,
+        email,
+        response.token,
+        response.user,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Login with a short-lived desktop bootstrap token.
@@ -303,7 +335,11 @@ fn persist_login(
     api_token: String,
     user: auth::LoginUser,
 ) -> AppResult<String> {
-    log::info!("persist_login: storing credentials for {} at {}", email, server_url);
+    log::info!(
+        "persist_login: storing credentials for {} at {}",
+        email,
+        server_url
+    );
     // Store token in keychain
     let token = auth::AuthToken {
         token: api_token,
@@ -321,7 +357,10 @@ fn persist_login(
         }
         Err(e) => {
             log::error!("persist_login: token verification FAILED - {}", e);
-            return Err(AppError::auth(format!("Weryfikacja tokenu nie powiodła się: {}", e)));
+            return Err(AppError::auth(format!(
+                "Weryfikacja tokenu nie powiodła się: {}",
+                e
+            )));
         }
     }
 
@@ -455,7 +494,10 @@ fn set_debug_mode(state: State<'_, AppState>, enabled: bool) -> Result<(), Strin
 
 /// Read log file contents (last N lines, reads only tail of file)
 #[tauri::command]
-fn get_log_contents(state: State<'_, AppState>, max_lines: Option<usize>) -> Result<String, String> {
+fn get_log_contents(
+    state: State<'_, AppState>,
+    max_lines: Option<usize>,
+) -> Result<String, String> {
     use std::io::{Read, Seek, SeekFrom};
     let limit = max_lines.unwrap_or(200);
     let mut file = std::fs::File::open(&state.log_path)
@@ -469,7 +511,11 @@ fn get_log_contents(state: State<'_, AppState>, max_lines: Option<usize>) -> Res
     file.read_to_string(&mut buf)
         .map_err(|e| format!("Read error: {}", e))?;
     let lines: Vec<&str> = buf.lines().collect();
-    let start = if lines.len() > limit { lines.len() - limit } else { 0 };
+    let start = if lines.len() > limit {
+        lines.len() - limit
+    } else {
+        0
+    };
     Ok(lines[start..].join("\n"))
 }
 
@@ -524,6 +570,56 @@ fn show_window(app: &AppHandle) {
     }
 }
 
+fn hide_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+fn configure_tray(app: &tauri::App) {
+    let initial_status = app.state::<AppState>().sync_engine.get_status();
+    update_tray_icon(app.handle(), &initial_status);
+
+    let Some(tray) = app.tray_by_id("main-tray") else {
+        log::warn!("Tray icon unavailable; leaving main window visible");
+        show_window(app.handle());
+        return;
+    };
+
+    let Ok(menu) = build_tray_menu(app.handle(), &initial_status) else {
+        log::warn!("Failed to build tray menu; leaving main window visible");
+        show_window(app.handle());
+        return;
+    };
+
+    if let Err(err) = tray.set_menu(Some(menu)) {
+        log::warn!("Failed to attach tray menu: {}", err);
+        show_window(app.handle());
+        return;
+    }
+
+    if let Err(err) = tray.set_show_menu_on_left_click(false) {
+        log::warn!("Failed to configure tray click behavior: {}", err);
+    }
+
+    tray.on_tray_icon_event(|tray, event| {
+        if let TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        } = event
+        {
+            show_window(tray.app_handle());
+        }
+    });
+
+    tray.on_menu_event(|app, event| {
+        handle_tray_menu_event(app, event);
+    });
+
+    hide_window(app.handle());
+}
+
 fn build_tray_menu(app: &AppHandle, status: &SyncStatus) -> tauri::Result<Menu<tauri::Wry>> {
     let status_label = match status {
         SyncStatus::Idle => "● Zsynchronizowano",
@@ -535,22 +631,48 @@ fn build_tray_menu(app: &AppHandle, status: &SyncStatus) -> tauri::Result<Menu<t
 
     let status_item = MenuItem::with_id(app, "status", status_label, false, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
-    let open_personal = MenuItem::with_id(app, "open_personal", "Otwórz Moje pliki", true, None::<&str>)?;
-    let open_shared = MenuItem::with_id(app, "open_shared", "Otwórz Udostępnione", true, None::<&str>)?;
+    let open_personal = MenuItem::with_id(
+        app,
+        "open_personal",
+        "Otwórz Moje pliki",
+        true,
+        None::<&str>,
+    )?;
+    let open_shared = MenuItem::with_id(
+        app,
+        "open_shared",
+        "Otwórz Udostępnione",
+        true,
+        None::<&str>,
+    )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let sync_now = MenuItem::with_id(app, "sync_now", "Synchronizuj teraz", !matches!(status, SyncStatus::Syncing), None::<&str>)?;
+    let sync_now = MenuItem::with_id(
+        app,
+        "sync_now",
+        "Synchronizuj teraz",
+        !matches!(status, SyncStatus::Syncing),
+        None::<&str>,
+    )?;
     let sep3 = PredefinedMenuItem::separator(app)?;
     let settings_item = MenuItem::with_id(app, "settings", "Ustawienia...", true, None::<&str>)?;
     let sep4 = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Zakończ", true, None::<&str>)?;
 
-    Menu::with_items(app, &[
-        &status_item, &sep1,
-        &open_personal, &open_shared, &sep2,
-        &sync_now, &sep3,
-        &settings_item, &sep4,
-        &quit_item,
-    ])
+    Menu::with_items(
+        app,
+        &[
+            &status_item,
+            &sep1,
+            &open_personal,
+            &open_shared,
+            &sep2,
+            &sync_now,
+            &sep3,
+            &settings_item,
+            &sep4,
+            &quit_item,
+        ],
+    )
 }
 
 fn handle_tray_menu_event(app: &AppHandle, event: MenuEvent) {
@@ -620,7 +742,9 @@ fn main() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
         // Force Mesa software rendering to prevent EGL_BAD_PARAMETER on GPUs
-        // that don't expose a compatible EGL display (common on Wayland)
+        // that don't expose a compatible EGL display (common on Wayland).
+        // Keep these vars for the whole process lifetime so WebKit subprocesses
+        // spawned after reload inherit the same renderer workaround.
         if std::env::var("LIBGL_ALWAYS_SOFTWARE").is_err() {
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
         }
@@ -640,9 +764,11 @@ fn main() {
         .append(true)
         .open(&log_path)
         .expect("Failed to open log file");
-    CombinedLogger::init(vec![
-        WriteLogger::new(LevelFilter::Info, LogConfig::default(), log_file),
-    ])
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::Info,
+        LogConfig::default(),
+        log_file,
+    )])
     .expect("Failed to initialize logger");
 
     let sync_engine = Arc::new(sync::SyncEngine::new());
@@ -736,59 +862,26 @@ fn main() {
             #[cfg(target_os = "linux")]
             {
                 if let Some(window) = app.get_webview_window("main") {
-                    window.with_webview(|webview| {
-                        use webkit2gtk::WebViewExt;
-                        use webkit2gtk::SettingsExt;
-                        if let Some(settings) = WebViewExt::settings(&webview.inner()) {
-                            SettingsExt::set_hardware_acceleration_policy(
-                                &settings,
-                                webkit2gtk::HardwareAccelerationPolicy::Never,
-                            );
-                        }
-                    }).ok();
+                    window
+                        .with_webview(|webview| {
+                            use webkit2gtk::SettingsExt;
+                            use webkit2gtk::WebViewExt;
+                            if let Some(settings) = WebViewExt::settings(&webview.inner()) {
+                                SettingsExt::set_hardware_acceleration_policy(
+                                    &settings,
+                                    webkit2gtk::HardwareAccelerationPolicy::Never,
+                                );
+                            }
+                        })
+                        .ok();
 
                     // Reload page — new subprocess uses software rendering (no EGL)
                     let _ = window.eval("setTimeout(() => window.location.reload(), 100)");
                 }
-
-                // Clean up GPU env vars now that webview is created —
-                // subprocesses like rclone should not inherit these.
-                std::env::remove_var("WEBKIT_DISABLE_COMPOSITING_MODE");
-                std::env::remove_var("LIBGL_ALWAYS_SOFTWARE");
             }
 
-            // Setup tray icon with expanded menu
-            let initial_status = app.state::<AppState>().sync_engine.get_status();
-            update_tray_icon(app.handle(), &initial_status);
-
-            let menu = build_tray_menu(app.handle(), &initial_status)?;
-
-            if let Some(tray) = app.tray_by_id("main-tray") {
-                tray.set_menu(Some(menu))?;
-                tray.set_show_menu_on_left_click(false)?;
-
-                // Left click: show/focus window
-                tray.on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        show_window(tray.app_handle());
-                    }
-                });
-
-                // Menu events
-                tray.on_menu_event(|app, event| {
-                    handle_tray_menu_event(app, event);
-                });
-            }
-
-            // Hide main window on startup (tray-only mode)
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.hide();
-            }
+            // Setup tray icon if available; otherwise fallback to a visible window.
+            configure_tray(app);
 
             log::info!("Veloryn CloudFile started");
             Ok(())
@@ -796,8 +889,10 @@ fn main() {
         .on_window_event(|window, event| {
             // Hide window instead of closing (keep in tray)
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+                if window.app_handle().tray_by_id("main-tray").is_some() {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .run(tauri::generate_context!())

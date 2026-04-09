@@ -66,7 +66,7 @@ jobs:
         if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
 
       # --- Node.js ---
       - name: Setup Node.js
@@ -164,6 +164,31 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
         run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Smoke test AppImage startup
+        if: startsWith(matrix.platform, 'ubuntu')
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPIMAGE="$(find src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name '*.AppImage' -print -quit)"
+          test -n "$APPIMAGE"
+          chmod +x "$APPIMAGE"
+          rm -rf squashfs-root
+          "$APPIMAGE" --appimage-extract >/dev/null
+          LOG_FILE="$RUNNER_TEMP/appimage-smoke.log"
+          set +e
+          timeout 20s xvfb-run -a env WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 \
+            ./squashfs-root/usr/bin/veloryn-cloudfile >"$LOG_FILE" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            cat "$LOG_FILE"
+            exit "$status"
+          fi
+          if grep -q "EGL_BAD_PARAMETER" "$LOG_FILE"; then
+            cat "$LOG_FILE"
+            exit 1
+          fi
 
       # --- Create GitHub Release ---
       - name: Get app version
