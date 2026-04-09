@@ -1,6 +1,6 @@
 {
   "name": "veloryn-cloudfile",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Veloryn CloudFile - Desktop sync client",
   "type": "module",
   "scripts": {
