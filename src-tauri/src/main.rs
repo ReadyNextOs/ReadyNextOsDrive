@@ -504,6 +504,13 @@ fn get_activity(state: State<'_, AppState>, limit: Option<usize>) -> Vec<Activit
     state.sync_engine.get_activity(limit.unwrap_or(50))
 }
 
+/// Get persisted sync run history from SQLite
+#[tauri::command]
+fn get_sync_history(state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<db::SyncRunEntry>, String> {
+    let pool = state.sync_engine.get_db_pool().map_err(|e| e.to_string())?;
+    db::list_sync_runs(&pool, limit.unwrap_or(50)).map_err(|e| e.to_string())
+}
+
 /// Pause synchronization
 #[tauri::command]
 fn pause_sync(state: State<'_, AppState>) {
@@ -908,6 +915,7 @@ fn main() {
             update_config,
             trigger_sync,
             get_activity,
+            get_sync_history,
             pause_sync,
             resume_sync,
             open_folder,

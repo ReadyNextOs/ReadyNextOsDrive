@@ -33,6 +33,18 @@ pub struct AppConfig {
 
     /// Maximum file size to sync (bytes, 0 = unlimited)
     pub max_file_size_bytes: u64,
+
+    /// Max upload speed in KB/s (0 = unlimited)
+    #[serde(default)]
+    pub max_upload_kbps: u64,
+
+    /// Max download speed in KB/s (0 = unlimited)
+    #[serde(default)]
+    pub max_download_kbps: u64,
+
+    /// Folders to include in sync (empty = sync all)
+    #[serde(default)]
+    pub sync_include_paths: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -50,6 +62,9 @@ impl Default for AppConfig {
             watch_local_changes: true,
             sync_on_startup: true,
             max_file_size_bytes: 0,
+            max_upload_kbps: 0,
+            max_download_kbps: 0,
+            sync_include_paths: Vec::new(),
         }
     }
 }

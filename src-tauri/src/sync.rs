@@ -45,6 +45,11 @@ impl SyncEngine {
     }
 
     /// Get or initialize the SQLite DB pool (lazy, created on first sync).
+    /// Public for Tauri commands that need direct DB access (e.g. sync history).
+    pub fn get_db_pool(&self) -> AppResult<DbPool> {
+        self.get_db()
+    }
+
     fn get_db(&self) -> AppResult<DbPool> {
         let mut guard = self
             .db
@@ -126,6 +131,7 @@ impl SyncEngine {
                 &config.personal_webdav_url(),
                 token,
                 source,
+                config,
             )
             .await;
 
@@ -155,6 +161,7 @@ impl SyncEngine {
                 &config.shared_webdav_url(),
                 token,
                 source,
+                config,
             )
             .await;
 
@@ -243,13 +250,29 @@ impl SyncEngine {
         webdav_url: &str,
         token: &str,
         _source: &str,
+        config: &AppConfig,
     ) -> AppResult<SyncRunStats> {
         log::info!("Starting sync zone '{}' local={}", zone, local_base.display());
 
-        let transfer = WebDavTransfer::new(webdav_url, token);
+        let transfer = WebDavTransfer::new_with_limits(
+            webdav_url,
+            token,
+            config.max_upload_kbps,
+            config.max_download_kbps,
+        );
 
         // 1. Scan local files
-        let local_files = scan_local_files(local_base)?;
+        let mut local_files = scan_local_files(local_base)?;
+
+        // Apply selective sync filter (if configured)
+        if !config.sync_include_paths.is_empty() {
+            local_files.retain(|f| {
+                config.sync_include_paths.iter().any(|include| {
+                    f.path.starts_with(include) || include.starts_with(&f.path)
+                })
+            });
+        }
+        let local_files = local_files;
         log::debug!("Zone '{}': {} local files found", zone, local_files.len());
 
         // 2. Scan remote files

@@ -434,6 +434,64 @@ pub fn complete_sync_run(
     Ok(())
 }
 
+/// A persisted sync run record.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SyncRunEntry {
+    pub id: i64,
+    pub started_at: String,
+    pub completed_at: Option<String>,
+    pub status: String,
+    pub source: Option<String>,
+    pub files_uploaded: i32,
+    pub files_downloaded: i32,
+    pub files_deleted: i32,
+    pub files_conflicted: i32,
+    pub bytes_transferred: i64,
+    pub error_message: Option<String>,
+    pub duration_ms: Option<i64>,
+}
+
+/// List recent sync runs from SQLite (most recent first).
+pub fn list_sync_runs(pool: &DbPool, limit: usize) -> AppResult<Vec<SyncRunEntry>> {
+    let conn = pool
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, started_at, completed_at, status, source,
+                    files_uploaded, files_downloaded, files_deleted,
+                    files_conflicted, bytes_transferred, error_message, duration_ms
+             FROM sync_run
+             ORDER BY started_at DESC
+             LIMIT ?1",
+        )
+        .map_err(|e| AppError::io(format!("Failed to prepare sync_run query: {}", e)))?;
+
+    let entries = stmt
+        .query_map(params![limit as i64], |row| {
+            Ok(SyncRunEntry {
+                id: row.get(0)?,
+                started_at: row.get(1)?,
+                completed_at: row.get(2)?,
+                status: row.get(3)?,
+                source: row.get(4)?,
+                files_uploaded: row.get(5)?,
+                files_downloaded: row.get(6)?,
+                files_deleted: row.get(7)?,
+                files_conflicted: row.get(8)?,
+                bytes_transferred: row.get(9)?,
+                error_message: row.get(10)?,
+                duration_ms: row.get(11)?,
+            })
+        })
+        .map_err(|e| AppError::io(format!("Failed to query sync_run: {}", e)))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| AppError::io(format!("Failed to read sync_run rows: {}", e)))?;
+
+    Ok(entries)
+}
+
 // ==================== Local Trash ====================
 
 pub fn add_to_local_trash(pool: &DbPool, entry: &LocalTrashEntry) -> AppResult<()> {

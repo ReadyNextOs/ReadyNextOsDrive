@@ -9,6 +9,10 @@ pub struct WebDavTransfer {
     client: Client,
     base_url: String,
     token: String,
+    /// Upload speed limit in bytes/sec (0 = unlimited)
+    upload_limit_bps: u64,
+    /// Download speed limit in bytes/sec (0 = unlimited)
+    download_limit_bps: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +41,17 @@ impl WebDavTransfer {
     /// Create a new transfer client.
     /// base_url: e.g. "https://dev.veloryn.pl/backend/dav/personal"
     pub fn new(base_url: &str, token: &str) -> Self {
+        Self::new_with_limits(base_url, token, 0, 0)
+    }
+
+    /// Create a new transfer client with bandwidth limits.
+    /// Limits are in KB/s (0 = unlimited).
+    pub fn new_with_limits(
+        base_url: &str,
+        token: &str,
+        upload_limit_kbps: u64,
+        download_limit_kbps: u64,
+    ) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(300))
             .build()
@@ -45,6 +60,19 @@ impl WebDavTransfer {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             token: token.to_string(),
+            upload_limit_bps: upload_limit_kbps * 1024,
+            download_limit_bps: download_limit_kbps * 1024,
+        }
+    }
+
+    /// Apply rate limiting by sleeping proportionally to data transferred.
+    async fn rate_limit(&self, bytes: u64, limit_bps: u64) {
+        if limit_bps == 0 || bytes == 0 {
+            return;
+        }
+        let expected_duration_ms = (bytes as f64 / limit_bps as f64 * 1000.0) as u64;
+        if expected_duration_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(expected_duration_ms)).await;
         }
     }
 
