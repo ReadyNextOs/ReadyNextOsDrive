@@ -129,8 +129,8 @@ fn validate_sync_path(path: &Path) -> AppResult<()> {
 fn validate_config(config: &AppConfig) -> AppResult<()> {
     validate_server_url(&config.server_url)?;
 
-    if config.user_email.trim().is_empty() {
-        return Err(AppError::config("Brak adresu e-mail użytkownika"));
+    if config.user_login.trim().is_empty() {
+        return Err(AppError::config("Brak loginu użytkownika"));
     }
 
     if config.sync_interval_secs < 30 || config.sync_interval_secs > 3600 {
@@ -215,8 +215,8 @@ async fn run_sync_once(
 ) -> AppResult<()> {
     let cfg = state.config().clone();
     log::info!(
-        "run_sync_once: email={}, server={}, configured={}",
-        cfg.user_email,
+        "run_sync_once: login={}, server={}, configured={}",
+        cfg.user_login,
         cfg.server_url,
         cfg.is_configured()
     );
@@ -224,8 +224,8 @@ async fn run_sync_once(
         return Err(AppError::sync("Aplikacja nie jest skonfigurowana"));
     }
 
-    let token = auth::get_token(&cfg.user_email)?.ok_or_else(|| {
-        log::error!("run_sync_once: no token in keychain for {}", cfg.user_email);
+    let token = auth::get_token(&cfg.user_login)?.ok_or_else(|| {
+        log::error!("run_sync_once: no token in keychain for {}", cfg.user_login);
         AppError::auth("Brak tokenu logowania")
     })?;
 
@@ -280,25 +280,25 @@ async fn run_scheduler_tick(app: &tauri::AppHandle) {
 
 // ==================== Tauri Commands ====================
 
-/// Login with email and password
+/// Login with login and password
 #[tauri::command]
 async fn login(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     server_url: String,
-    email: String,
+    login: String,
     password: String,
 ) -> Result<String, String> {
     validate_server_url(&server_url).map_err(|e| e.to_string())?;
 
-    let response = auth::login(&server_url, &email, &password)
+    let response = auth::login(&server_url, &login, &password)
         .await
         .map_err(|e| e.to_string())?;
     persist_login(
         &app,
         &state,
         server_url,
-        email,
+        login,
         response.token,
         response.user,
     )
@@ -320,7 +320,7 @@ async fn login_with_token(
         &app,
         &state,
         response.config.server_url,
-        response.user.email.clone(),
+        response.user.login.clone(),
         response.token,
         response.user,
     )
@@ -331,13 +331,13 @@ fn persist_login(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
     server_url: String,
-    email: String,
+    login: String,
     api_token: String,
     user: auth::LoginUser,
 ) -> AppResult<String> {
     log::info!(
         "persist_login: storing credentials for {} at {}",
-        email,
+        login,
         server_url
     );
     // Store token in keychain
@@ -346,10 +346,10 @@ fn persist_login(
         token_type: auth::TokenType::Sanctum,
         expires_at: None,
     };
-    auth::store_token(&email, &token)?;
+    auth::store_token(&login, &token)?;
 
     // Verify token was stored — fail login if keychain didn't persist
-    match auth::get_token(&email) {
+    match auth::get_token(&login) {
         Ok(Some(_)) => log::info!("persist_login: token verification OK"),
         Ok(None) => {
             log::error!("persist_login: token verification FAILED - not found after store!");
@@ -371,8 +371,8 @@ fn persist_login(
     {
         let mut cfg = state.config();
         cfg.server_url = server_url;
-        cfg.user_email = email;
-        cfg.tenant_id = user.tenant_id;
+        cfg.user_login = login;
+        cfg.tenant_id = user.tenant_id.unwrap_or_default();
         config::save_config(app, &cfg)?;
     }
 
@@ -386,9 +386,9 @@ fn persist_login(
 /// Logout and remove stored credentials
 #[tauri::command]
 fn logout(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let email = state.config().user_email.clone();
-    if !email.is_empty() {
-        auth::remove_token(&email).map_err(|e| e.to_string())?;
+    let login = state.config().user_login.clone();
+    if !login.is_empty() {
+        auth::remove_token(&login).map_err(|e| e.to_string())?;
     }
 
     state.watcher().stop();
@@ -692,8 +692,8 @@ fn handle_tray_menu_event(app: &AppHandle, event: MenuEvent) {
             tauri::async_runtime::spawn(async move {
                 let state = app.state::<AppState>();
                 let cfg = state.config().clone();
-                let email = cfg.user_email.clone();
-                if let Ok(Some(token)) = auth::get_token(&email) {
+                let login = cfg.user_login.clone();
+                if let Ok(Some(token)) = auth::get_token(&login) {
                     let engine = state.sync_engine.clone();
                     // Update tray icon to syncing
                     update_tray_icon(&app, &SyncStatus::Syncing);

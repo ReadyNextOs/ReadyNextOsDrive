@@ -8,7 +8,7 @@ interface LoginPageProps {
 export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [mode, setMode] = useState<'token' | 'advanced'>('token');
   const [serverUrl, setServerUrl] = useState('');
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,14 +20,14 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     setLoading(true);
 
     try {
-      await login(serverUrl, email, password);
+      await login(serverUrl, login, password);
       onLoginSuccess();
     } catch (err) {
       setError(formatLoginError(err));
     } finally {
       setLoading(false);
     }
-  }, [serverUrl, email, password, onLoginSuccess]);
+  }, [serverUrl, login, password, onLoginSuccess]);
 
   const handleTokenSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault();
@@ -115,14 +115,14 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               </div>
 
               <div className="input-group">
-                <label htmlFor="email">E-mail</label>
+                <label htmlFor="login">Login</label>
                 <input
-                  id="email"
-                  type="email"
+                  id="login"
+                  type="text"
                   className="input"
                   placeholder="jan@firma.pl"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
                   required
                 />
               </div>
@@ -150,7 +150,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               loading ||
               (mode === 'token'
                 ? !token.trim()
-                : !serverUrl.trim() || !email.trim() || !password)
+                : !serverUrl.trim() || !login.trim() || !password)
             }
             style={{ marginTop: 8 }}
           >

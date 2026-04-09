@@ -31,14 +31,14 @@ impl AuthToken {
 }
 
 /// Store the auth token in the OS keychain.
-pub fn store_token(email: &str, token: &AuthToken) -> AppResult<()> {
+pub fn store_token(login: &str, token: &AuthToken) -> AppResult<()> {
     log::info!(
-        "store_token: storing for email={}, type={:?}, expires_at={:?}",
-        email,
+        "store_token: storing for login={}, type={:?}, expires_at={:?}",
+        login,
         token.token_type,
         token.expires_at
     );
-    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| {
+    let entry = Entry::new(SERVICE_NAME, login).map_err(|e| {
         log::error!("store_token: failed to create keychain entry: {}", e);
         AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
     })?;
@@ -48,14 +48,14 @@ pub fn store_token(email: &str, token: &AuthToken) -> AppResult<()> {
         log::error!("store_token: failed to save to keychain: {}", e);
         AppError::auth(format!("Nie udało się zapisać tokenu: {}", e))
     })?;
-    log::info!("store_token: token saved successfully for {}", email);
+    log::info!("store_token: token saved successfully for {}", login);
     Ok(())
 }
 
 /// Retrieve the auth token from the OS keychain.
-pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
-    log::info!("get_token: looking up token for email={}", email);
-    let entry = Entry::new(SERVICE_NAME, email).map_err(|e| {
+pub fn get_token(login: &str) -> AppResult<Option<AuthToken>> {
+    log::info!("get_token: looking up token for login={}", login);
+    let entry = Entry::new(SERVICE_NAME, login).map_err(|e| {
         log::error!("get_token: failed to create keychain entry: {}", e);
         AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e))
     })?;
@@ -77,7 +77,7 @@ pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
             }
         }
         Err(keyring::Error::NoEntry) => {
-            log::warn!("get_token: no token found in keychain for {}", email);
+            log::warn!("get_token: no token found in keychain for {}", login);
             Ok(None)
         }
         Err(e) => {
@@ -91,8 +91,8 @@ pub fn get_token(email: &str) -> AppResult<Option<AuthToken>> {
 }
 
 /// Remove the auth token from the OS keychain.
-pub fn remove_token(email: &str) -> AppResult<()> {
-    let entry = Entry::new(SERVICE_NAME, email)
+pub fn remove_token(login: &str) -> AppResult<()> {
+    let entry = Entry::new(SERVICE_NAME, login)
         .map_err(|e| AppError::auth(format!("Nie udało się utworzyć wpisu keychain: {}", e)))?;
     match entry.delete_credential() {
         Ok(()) => Ok(()),
@@ -126,13 +126,13 @@ pub struct DesktopTokenConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginUser {
     pub id: String,
-    pub email: String,
+    pub login: String,
     pub name: String,
-    pub tenant_id: String,
+    pub tenant_id: Option<String>,
 }
 
-/// Login with email and password, returns Sanctum API token.
-pub async fn login(server_url: &str, email: &str, password: &str) -> AppResult<LoginResponse> {
+/// Login with login and password, returns Sanctum API token.
+pub async fn login(server_url: &str, login: &str, password: &str) -> AppResult<LoginResponse> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
@@ -142,7 +142,7 @@ pub async fn login(server_url: &str, email: &str, password: &str) -> AppResult<L
     let response = client
         .post(&url)
         .json(&serde_json::json!({
-            "email": email,
+            "login": login,
             "password": password,
             "device_name": "Veloryn CloudFile",
         }))
@@ -152,7 +152,7 @@ pub async fn login(server_url: &str, email: &str, password: &str) -> AppResult<L
 
     if !response.status().is_success() {
         return Err(match response.status().as_u16() {
-            401 => AppError::auth("Nieprawidłowy e-mail lub hasło"),
+            401 => AppError::auth("Nieprawidłowy login lub hasło"),
             403 => AppError::auth("Logowanie zostało odrzucone przez serwer"),
             408 | 504 => AppError::network("Serwer nie odpowiedział na czas"),
             status => AppError::auth(format!("Logowanie nie powiodło się (HTTP {})", status)),

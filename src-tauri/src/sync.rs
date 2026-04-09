@@ -60,7 +60,7 @@ impl SyncEngine {
                 app,
                 &config.personal_webdav_url(),
                 &config.personal_sync_path.to_string_lossy(),
-                &config.user_email,
+                &config.user_login,
                 &obscured_token,
             )
             .await;
@@ -77,7 +77,7 @@ impl SyncEngine {
                 app,
                 &config.shared_webdav_url(),
                 &config.shared_sync_path.to_string_lossy(),
-                &config.user_email,
+                &config.user_login,
                 &obscured_token,
             )
             .await;

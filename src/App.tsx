@@ -18,7 +18,7 @@ export default function App() {
   useEffect(() => {
     getConfig()
       .then((config) => {
-        if (config.server_url && config.user_email) {
+        if (config.server_url && config.user_login) {
           setIsLoggedIn(true);
         }
       })

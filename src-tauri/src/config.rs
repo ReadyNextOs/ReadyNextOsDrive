@@ -10,8 +10,8 @@ pub struct AppConfig {
     /// Server URL (e.g., "https://docs.company.com")
     pub server_url: String,
 
-    /// User email (used as WebDAV username)
-    pub user_email: String,
+    /// User login (used as WebDAV username)
+    pub user_login: String,
 
     /// Tenant ID
     pub tenant_id: String,
@@ -42,7 +42,7 @@ impl Default for AppConfig {
 
         Self {
             server_url: String::new(),
-            user_email: String::new(),
+            user_login: String::new(),
             tenant_id: String::new(),
             personal_sync_path: base.join("Moje pliki"),
             shared_sync_path: base.join("Udostępnione"),
@@ -57,7 +57,7 @@ impl Default for AppConfig {
 impl AppConfig {
     /// Check if the configuration is complete (user logged in)
     pub fn is_configured(&self) -> bool {
-        !self.server_url.is_empty() && !self.user_email.is_empty()
+        !self.server_url.is_empty() && !self.user_login.is_empty()
     }
 
     /// Get the WebDAV URL for personal files

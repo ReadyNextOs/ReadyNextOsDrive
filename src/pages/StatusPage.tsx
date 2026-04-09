@@ -104,7 +104,7 @@ export default function StatusPage() {
 
         {config && (
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-            {config.user_email} &middot; {config.server_url}
+            {config.user_login} &middot; {config.server_url}
           </p>
         )}
 

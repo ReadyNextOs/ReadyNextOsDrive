@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export interface AppConfig {
   server_url: string;
-  user_email: string;
+  user_login: string;
   tenant_id: string;
   personal_sync_path: string;
   shared_sync_path: string;
@@ -29,13 +29,13 @@ export interface ActivityEntry {
 
 export interface LoginUser {
   id: string;
-  email: string;
+  login: string;
   name: string;
   tenant_id: string;
 }
 
-export async function login(serverUrl: string, email: string, password: string): Promise<LoginUser> {
-  const result = await invoke<string>('login', { serverUrl, email, password });
+export async function login(serverUrl: string, login: string, password: string): Promise<LoginUser> {
+  const result = await invoke<string>('login', { serverUrl, login, password });
   return JSON.parse(result);
 }
 

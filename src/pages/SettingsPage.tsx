@@ -193,7 +193,7 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
         <div className="card">
           <h3 className="card-title">Konto</h3>
           <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
-            {config.user_email} &middot; {config.server_url}
+            {config.user_login} &middot; {config.server_url}
           </p>
 
           {message && (
