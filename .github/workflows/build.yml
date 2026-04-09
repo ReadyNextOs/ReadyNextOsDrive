@@ -269,42 +269,61 @@ jobs:
       - name: Get app version
         id: version
         shell: bash
-        run: echo "version=$(node -p 'require("./package.json").version')" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=$(node -e 'console.log(require("./package.json").version)')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
 
-      - name: Merge and upload latest.json
+      - name: Build and upload latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v${{ steps.version.outputs.version }}"
           VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          REPO="ReadyNextOs/ReadyNextOsDrive"
+          BASE_URL="https://github.com/$REPO/releases/download/$TAG"
 
-          # Download per-platform latest.json files uploaded by each build matrix leg.
-          mkdir -p /tmp/updater-jsons
-          gh release download "$TAG" \
-            --pattern "latest.json*" \
-            --dir /tmp/updater-jsons \
-            --clobber 2>/dev/null || true
+          # Download .sig files from release to read signatures
+          mkdir -p /tmp/sigs
+          gh release download "$TAG" --repo "$REPO" --pattern "*.sig" --dir /tmp/sigs --clobber
 
-          # Merge all downloaded latest.json* files into one
-          python3 -c "
-          import json, os, glob, datetime
-          merged = {}
-          notes = 'Veloryn CloudFile v$VERSION'
-          pub_date = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-          for p in sorted(glob.glob('/tmp/updater-jsons/latest.json*')):
-              try:
-                  data = json.load(open(p))
-                  merged.update(data.get('platforms', {}))
-                  if data.get('notes'): notes = data['notes']
-                  if data.get('pub_date'): pub_date = data['pub_date']
-              except Exception as e:
-                  print(f'Warning: {p}: {e}')
-          json.dump({'version': '$VERSION', 'notes': notes, 'pub_date': pub_date, 'platforms': merged}, open('/tmp/latest.json', 'w'), indent=2)
-          "
+          # Build platforms object from actual assets
+          PLATFORMS="{}"
 
-          echo "=== Merged latest.json ==="
+          # Linux x86_64 — AppImage
+          APPIMAGE_SIG="/tmp/sigs/Veloryn.CloudFile_${VERSION}_amd64.AppImage.sig"
+          if [ -f "$APPIMAGE_SIG" ]; then
+            SIG=$(cat "$APPIMAGE_SIG")
+            URL="$BASE_URL/Veloryn.CloudFile_${VERSION}_amd64.AppImage"
+            PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "$URL" --arg sig "$SIG" '. + {"linux-x86_64": {"url": $url, "signature": $sig}}')
+            echo "Added linux-x86_64"
+          fi
+
+          # Windows x86_64 — MSI
+          MSI_SIG="/tmp/sigs/Veloryn.CloudFile_${VERSION}_x64_pl-PL.msi.sig"
+          if [ -f "$MSI_SIG" ]; then
+            SIG=$(cat "$MSI_SIG")
+            URL="$BASE_URL/Veloryn.CloudFile_${VERSION}_x64_pl-PL.msi"
+            PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "$URL" --arg sig "$SIG" '. + {"windows-x86_64": {"url": $url, "signature": $sig}}')
+            echo "Added windows-x86_64"
+          fi
+
+          # macOS — requires .app.tar.gz which only exists if built with --bundles app
+          # Currently building --bundles dmg only, so macOS updater artifacts are not generated.
+
+          # Assemble the final latest.json
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "Veloryn CloudFile v$VERSION" \
+            --arg pub_date "$PUB_DATE" \
+            --argjson platforms "$PLATFORMS" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: $platforms}' \
+            > /tmp/latest.json
+
+          echo "=== Generated latest.json ==="
           cat /tmp/latest.json
 
           gh release upload "$TAG" /tmp/latest.json --clobber
