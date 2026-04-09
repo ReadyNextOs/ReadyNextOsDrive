@@ -15,22 +15,6 @@
     "dialog:default",
     "shell:default",
     "shell:allow-open",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        { "name": "rclone", "sidecar": true, "args": true },
-        { "name": "rclone", "args": true }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        { "name": "rclone", "sidecar": true, "args": true },
-        { "name": "rclone", "args": true }
-      ]
-    },
-    "shell:allow-stdin-write",
-    "shell:allow-kill",
     "updater:default",
     "process:allow-restart"
   ]
