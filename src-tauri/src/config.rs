@@ -50,7 +50,7 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let base = home.join("Veloryn");
+        let base = home.join("CloudFile");
 
         Self {
             server_url: String::new(),
