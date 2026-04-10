@@ -11,6 +11,7 @@ export default function UpdatePage() {
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [total, setTotal] = useState<number | null>(null);
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
@@ -41,11 +42,14 @@ export default function UpdatePage() {
     setDownloading(true);
     setError(null);
     setProgress(0);
+    setTotal(null);
     try {
       let downloaded = 0;
       await update.downloadAndInstall((event) => {
-        if (event.event === 'Started' && event.data.contentLength) {
+        if (event.event === 'Started') {
+          downloaded = 0;
           setProgress(0);
+          setTotal(event.data.contentLength ?? null);
         } else if (event.event === 'Progress') {
           downloaded += event.data.chunkLength;
           setProgress(downloaded);
@@ -105,29 +109,34 @@ export default function UpdatePage() {
             </p>
           )}
 
-          {downloading && (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{
-                height: 4,
-                background: '#e0e0e0',
-                borderRadius: 2,
-                overflow: 'hidden',
-              }}>
+          {downloading && (() => {
+            const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+            const pct = total && total > 0 ? Math.min(100, (progress / total) * 100) : null;
+            return (
+              <div style={{ marginBottom: 8 }}>
                 <div style={{
-                  height: '100%',
-                  background: 'var(--color-primary)',
-                  width: progress > 0 ? '100%' : '30%',
-                  transition: 'width 0.3s',
-                  animation: progress === 0 ? 'none' : undefined,
-                }} />
+                  height: 4,
+                  background: '#e0e0e0',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%',
+                    background: 'var(--color-primary)',
+                    width: pct !== null ? `${pct}%` : '30%',
+                    transition: 'width 0.2s linear',
+                  }} />
+                </div>
+                <p style={{ fontSize: 10, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                  {pct !== null
+                    ? `${mb(progress)} / ${mb(total!)} MB (${pct.toFixed(0)}%)`
+                    : progress > 0
+                      ? `Pobrano ${mb(progress)} MB`
+                      : 'Pobieranie...'}
+                </p>
               </div>
-              <p style={{ fontSize: 10, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-                {progress > 0
-                  ? `Pobrano ${(progress / 1024 / 1024).toFixed(1)} MB`
-                  : 'Pobieranie...'}
-              </p>
-            </div>
-          )}
+            );
+          })()}
 
           <button
             className="btn btn-primary btn-sm"
