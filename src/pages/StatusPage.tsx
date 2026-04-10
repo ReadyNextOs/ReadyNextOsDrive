@@ -1,5 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSyncStatus, getConfig, getActivity, triggerSync, openFolder, type SyncStatus, type AppConfig } from '@/lib/tauri';
+import {
+  getSyncStatus,
+  getConfig,
+  getActivity,
+  triggerSync,
+  openFolder,
+  pauseSync,
+  resumeSync,
+  type SyncStatus,
+  type AppConfig,
+} from '@/lib/tauri';
 
 export default function StatusPage() {
   const [status, setStatus] = useState<SyncStatus>('NotConfigured');
@@ -73,6 +83,19 @@ export default function StatusPage() {
     }
   }, [refreshStatus]);
 
+  const handleTogglePause = useCallback(async () => {
+    try {
+      if (status === 'Paused') {
+        await resumeSync();
+      } else {
+        await pauseSync();
+      }
+      refreshStatus();
+    } catch (err) {
+      console.error('Failed to toggle pause:', err);
+    }
+  }, [status, refreshStatus]);
+
   const handleOpenPersonal = useCallback(() => {
     if (config) openFolder(config.personal_sync_path);
   }, [config]);
@@ -112,13 +135,24 @@ export default function StatusPage() {
           <p className="error-detail" style={{ marginBottom: 8 }}>{syncError}</p>
         )}
 
-        <button
-          className="btn btn-primary"
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          {syncing ? 'Synchronizacja...' : 'Synchronizuj teraz'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn btn-primary"
+            onClick={handleSync}
+            disabled={syncing || status === 'Paused'}
+            style={{ flex: 1 }}
+          >
+            {syncing ? 'Synchronizacja...' : 'Synchronizuj teraz'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={handleTogglePause}
+            disabled={status === 'NotConfigured' || status === 'Syncing'}
+            title={status === 'Paused' ? 'Wznów synchronizację' : 'Wstrzymaj synchronizację'}
+          >
+            {status === 'Paused' ? '▶ Wznów' : '⏸ Wstrzymaj'}
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -151,6 +185,7 @@ export default function StatusPage() {
 function getStatusLabel(status: SyncStatus): string {
   if (status === 'Idle') return 'Zsynchronizowane';
   if (status === 'Syncing') return 'Synchronizacja...';
+  if (status === 'Paused') return 'Wstrzymano';
   if (status === 'Conflict') return 'Konflikt';
   if (status === 'NotConfigured') return 'Nie skonfigurowano';
   if (typeof status === 'object' && 'Error' in status) return 'Błąd';
@@ -160,6 +195,7 @@ function getStatusLabel(status: SyncStatus): string {
 function getStatusClass(status: SyncStatus): string {
   if (status === 'Idle') return 'status-idle';
   if (status === 'Syncing') return 'status-syncing';
+  if (status === 'Paused') return 'status-paused';
   if (status === 'Conflict') return 'status-conflict';
   if (typeof status === 'object' && 'Error' in status) return 'status-error';
   return '';

@@ -7,6 +7,7 @@ import ActivityPage from '@/pages/ActivityPage';
 import SettingsPage from '@/pages/SettingsPage';
 import UpdatePage from '@/pages/UpdatePage';
 import SyncToast from '@/components/SyncToast';
+import ConflictDialog from '@/components/ConflictDialog';
 
 type Page = 'status' | 'activity' | 'settings' | 'update';
 
@@ -111,6 +112,7 @@ export default function App() {
         {currentPage === 'update' && <UpdatePage />}
       </div>
       <SyncToast />
+      <ConflictDialog />
     </div>
   );
 }

@@ -10,11 +10,15 @@ export interface AppConfig {
   watch_local_changes: boolean;
   sync_on_startup: boolean;
   max_file_size_bytes: number;
+  max_upload_kbps: number;
+  max_download_kbps: number;
+  sync_include_paths: string[];
 }
 
 export type SyncStatus =
   | 'Idle'
   | 'Syncing'
+  | 'Paused'
   | 'Conflict'
   | { Error: string }
   | 'NotConfigured';
@@ -25,6 +29,36 @@ export interface ActivityEntry {
   file_path: string;
   status: string;
   details: string | null;
+}
+
+export interface SyncRunEntry {
+  id: number;
+  started_at: string;
+  completed_at: string | null;
+  status: 'running' | 'success' | 'error' | 'partial';
+  source: string | null;
+  files_uploaded: number;
+  files_downloaded: number;
+  files_deleted: number;
+  files_conflicted: number;
+  bytes_transferred: number;
+  error_message: string | null;
+  duration_ms: number | null;
+}
+
+export interface SyncConflictPayload {
+  path: string;
+  localPath: string;
+  remotePath: string;
+  conflictType: 'BothModified' | 'DeletedLocallyModifiedRemotely' | 'DeletedRemotelyModifiedLocally';
+  resolution: string;
+}
+
+export interface SyncFileProgressPayload {
+  path: string;
+  action: 'upload' | 'download' | 'delete';
+  current: number;
+  total: number;
 }
 
 export interface LoginUser {
@@ -66,6 +100,18 @@ export async function triggerSync(): Promise<void> {
 
 export async function getActivity(limit?: number): Promise<ActivityEntry[]> {
   return invoke<ActivityEntry[]>('get_activity', { limit: limit ?? 50 });
+}
+
+export async function getSyncHistory(limit?: number): Promise<SyncRunEntry[]> {
+  return invoke<SyncRunEntry[]>('get_sync_history', { limit: limit ?? 50 });
+}
+
+export async function pauseSync(): Promise<void> {
+  await invoke('pause_sync');
+}
+
+export async function resumeSync(): Promise<void> {
+  await invoke('resume_sync');
 }
 
 export async function openFolder(path: string): Promise<void> {

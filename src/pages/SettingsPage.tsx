@@ -192,6 +192,80 @@ export default function SettingsPage({ onLogout }: SettingsPageProps) {
         </div>
 
         <div className="card">
+          <h3 className="card-title">Limity prędkości</h3>
+          <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+            0 = bez limitu
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="upload-kbps">Upload (KB/s)</label>
+            <select
+              id="upload-kbps"
+              className="input input-sm"
+              value={config.max_upload_kbps}
+              onChange={(e) =>
+                setConfig({ ...config, max_upload_kbps: parseInt(e.target.value, 10) })
+              }
+            >
+              <option value={0}>Bez limitu</option>
+              <option value={256}>256 KB/s</option>
+              <option value={1024}>1 MB/s</option>
+              <option value={5120}>5 MB/s</option>
+              <option value={10240}>10 MB/s</option>
+            </select>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="download-kbps">Download (KB/s)</label>
+            <select
+              id="download-kbps"
+              className="input input-sm"
+              value={config.max_download_kbps}
+              onChange={(e) =>
+                setConfig({ ...config, max_download_kbps: parseInt(e.target.value, 10) })
+              }
+            >
+              <option value={0}>Bez limitu</option>
+              <option value={256}>256 KB/s</option>
+              <option value={1024}>1 MB/s</option>
+              <option value={5120}>5 MB/s</option>
+              <option value={10240}>10 MB/s</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="card-title">Selektywna synchronizacja</h3>
+          <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+            Wybierz foldery do synchronizacji (pusta lista = wszystkie).
+            Podaj względne ścieżki, po jednej na wiersz.
+          </p>
+
+          <textarea
+            className="input input-sm"
+            rows={4}
+            placeholder="Documents/Projects&#10;Pictures/2026"
+            value={config.sync_include_paths.join('\n')}
+            onChange={(e) =>
+              setConfig({
+                ...config,
+                sync_include_paths: e.target.value
+                  .split('\n')
+                  .map((p) => p.trim())
+                  .filter((p) => p.length > 0),
+              })
+            }
+            style={{ width: '100%', fontFamily: 'var(--font-mono, monospace)', fontSize: 11, resize: 'vertical' }}
+          />
+
+          {config.sync_include_paths.length > 0 && (
+            <p style={{ fontSize: 10, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+              Synchronizowane: {config.sync_include_paths.length} folder(ów)
+            </p>
+          )}
+        </div>
+
+        <div className="card">
           <h3 className="card-title">Konto</h3>
           <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
             {config.user_login} &middot; {config.server_url}
