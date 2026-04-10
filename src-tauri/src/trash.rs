@@ -1,3 +1,6 @@
+// restore_file/list/clear are exposed for upcoming Tauri commands (local trash UI).
+#![allow(dead_code)]
+
 use crate::db::{self, DbPool, LocalTrashEntry};
 use crate::error::{AppError, AppResult};
 use chrono::{Duration, Utc};

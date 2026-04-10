@@ -1,3 +1,6 @@
+// Some fields/methods are part of the public API surface but not yet consumed.
+#![allow(dead_code)]
+
 use crate::error::{AppError, AppResult};
 use reqwest::Client;
 use std::path::Path;

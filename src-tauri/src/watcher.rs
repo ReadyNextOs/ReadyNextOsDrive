@@ -1,3 +1,6 @@
+// is_running/has_changes are legacy helpers still reachable via get_db_pool etc.
+#![allow(dead_code)]
+
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 use std::time::Duration;

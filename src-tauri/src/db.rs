@@ -1,3 +1,7 @@
+// Some APIs are used by Tauri commands (planned Phase 4 UI wiring) — allow
+// dead code to keep the full CRUD surface available without per-fn attributes.
+#![allow(dead_code)]
+
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
