@@ -569,7 +569,11 @@ fn open_log_file(state: State<'_, AppState>) -> Result<(), String> {
 
 /// Toggle debug mode
 #[tauri::command]
-fn set_debug_mode(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+fn set_debug_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), String> {
     state.debug_enabled.store(enabled, Ordering::Relaxed);
     if enabled {
         log::set_max_level(log::LevelFilter::Debug);
@@ -578,7 +582,7 @@ fn set_debug_mode(state: State<'_, AppState>, enabled: bool) -> Result<(), Strin
         log::set_max_level(log::LevelFilter::Info);
         log::info!("Debug mode disabled");
     }
-    Ok(())
+    config::save_debug_enabled(&app, enabled).map_err(|e| e.to_string())
 }
 
 /// Read log file contents (last N lines, reads only tail of file)
@@ -937,6 +941,16 @@ fn main() {
                 if let Err(err) = configure_watcher_for_current_config(&state) {
                     log::warn!("Failed to configure watcher on startup: {}", err);
                 }
+            }
+
+            // Restore persisted debug-mode flag
+            let debug_enabled = config::load_debug_enabled(app.handle());
+            if debug_enabled {
+                app.state::<AppState>()
+                    .debug_enabled
+                    .store(true, Ordering::Relaxed);
+                log::set_max_level(log::LevelFilter::Debug);
+                log::info!("Debug mode restored from store");
             }
 
             {

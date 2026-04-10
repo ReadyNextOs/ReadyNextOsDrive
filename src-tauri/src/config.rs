@@ -115,6 +115,27 @@ pub struct ActivityEntry {
 
 const STORE_FILE: &str = "config.json";
 const STORE_KEY: &str = "app_config";
+const DEBUG_KEY: &str = "debug_enabled";
+
+/// Read the persisted debug-mode flag from the store.
+pub fn load_debug_enabled(app: &AppHandle) -> bool {
+    app.store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get(DEBUG_KEY))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+/// Persist the debug-mode flag to the store.
+pub fn save_debug_enabled(app: &AppHandle, enabled: bool) -> AppResult<()> {
+    let store = app
+        .store(STORE_FILE)
+        .map_err(|e| AppError::config(format!("Nie udało się otworzyć store: {}", e)))?;
+    store.set(DEBUG_KEY.to_string(), serde_json::Value::Bool(enabled));
+    store
+        .save()
+        .map_err(|e| AppError::config(format!("Nie udało się zapisać trybu debug: {}", e)))
+}
 
 /// Load config from tauri-plugin-store (persisted across restarts).
 pub fn load_config(app: &AppHandle) -> Option<AppConfig> {

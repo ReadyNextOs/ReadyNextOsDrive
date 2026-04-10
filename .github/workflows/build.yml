@@ -148,11 +148,11 @@ jobs:
           rm -f libEGL.so* libEGL_mesa.so* libGL.so* libGLX.so* libGLdispatch.so* libgbm.so*
           cd ../../..
 
-          # Allow native Wayland instead of forcing X11
-          HOOK="squashfs-root/apprun-hooks/linuxdeploy-plugin-gtk.sh"
-          if [ -f "$HOOK" ]; then
-            sed -i 's/^export GDK_BACKEND=x11/#export GDK_BACKEND=x11/' "$HOOK"
-          fi
+          # Keep GDK_BACKEND=x11 forced by linuxdeploy-plugin-gtk.sh.
+          # WebKitGTK 4.1 on native Wayland (KDE Plasma 6 / KWin) delivers
+          # titlebar minimize/close events to the webview instead of GDK,
+          # so window controls stop working. XWayland (the default from the
+          # plugin hook) is the stable path for Tauri + WebKitGTK on Linux.
 
           # Repack AppImage
           wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
