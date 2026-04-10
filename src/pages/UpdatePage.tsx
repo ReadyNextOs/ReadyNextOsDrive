@@ -3,6 +3,50 @@ import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { getVersion } from '@tauri-apps/api/app';
 
+/**
+ * Translate cryptic errors from tauri-plugin-updater into a Polish, user-
+ * readable message. Covers the known failure modes we've hit in production.
+ */
+function friendlyUpdateError(raw: unknown): string {
+  const msg = String(raw).replace(/^(Error|invoke error):\s*/gi, '').trim();
+  const lower = msg.toLowerCase();
+
+  // Race window on release day: build has created the GitHub release but the
+  // finalize job hasn't uploaded latest.json yet, so /latest/download/latest.json
+  // redirects to a tag that doesn't have the manifest.
+  if (
+    lower.includes('could not fetch a valid release json') ||
+    lower.includes('not found')
+  ) {
+    return 'Nowa wersja jest właśnie przygotowywana na serwerze. Spróbuj ponownie za 2–3 minuty.';
+  }
+
+  // Repacked AppImage vs stale .sig (fixed in 0.6.1 CI, but keep message).
+  if (lower.includes('signature verification failed')) {
+    return 'Podpis nowej wersji nie zgadza się z plikiem. Skontaktuj się z administratorem lub spróbuj pobrać aktualizację ręcznie.';
+  }
+
+  // Generic network failures.
+  if (
+    lower.includes('network') ||
+    lower.includes('timeout') ||
+    lower.includes('dns') ||
+    lower.includes('connection') ||
+    lower.includes('tls') ||
+    lower.includes('certificate')
+  ) {
+    return 'Brak połączenia z serwerem aktualizacji. Sprawdź internet i spróbuj ponownie.';
+  }
+
+  // No signature or bad update manifest structure.
+  if (lower.includes('failed to deserialize') || lower.includes('missing field')) {
+    return 'Plik z informacją o aktualizacji jest uszkodzony. Spróbuj ponownie za chwilę.';
+  }
+
+  // Fallback — show the raw message so we can still diagnose unknown issues.
+  return `Nie udało się sprawdzić aktualizacji: ${msg}`;
+}
+
 export default function UpdatePage() {
   const [currentVersion, setCurrentVersion] = useState('');
   const [checking, setChecking] = useState(false);
@@ -31,7 +75,7 @@ export default function UpdatePage() {
         setNoUpdate(true);
       }
     } catch (err) {
-      setError(String(err).replace(/^(Error|invoke error):\s*/gi, '').trim());
+      setError(friendlyUpdateError(err));
     } finally {
       setChecking(false);
     }
@@ -59,7 +103,7 @@ export default function UpdatePage() {
       });
       setInstalled(true);
     } catch (err) {
-      setError(String(err).replace(/^(Error|invoke error):\s*/gi, '').trim());
+      setError(friendlyUpdateError(err));
       setDownloading(false);
     }
   }, [update]);

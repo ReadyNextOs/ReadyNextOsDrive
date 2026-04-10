@@ -198,8 +198,14 @@ jobs:
         shell: bash
         run: |
           TAG="v${{ steps.version.outputs.version }}"
+          # Create release but do NOT mark as "latest" yet. The finalize job
+          # will flip the --latest flag after uploading latest.json, so the
+          # /releases/latest/download/latest.json URL does not 404 during the
+          # window between "first build job creates the release" and "finalize
+          # uploads the manifest".
           gh release create "$TAG" \
             --title "Veloryn CloudFile $TAG" \
+            --latest=false \
             --notes "## Veloryn CloudFile $TAG
 
           Klient synchronizacji plików.
@@ -308,3 +314,9 @@ jobs:
           cat /tmp/latest.json
 
           gh release upload "$TAG" /tmp/latest.json --clobber
+
+          # Only now flip this release to "latest" — after latest.json is in
+          # place. Prevents the /releases/latest/download/latest.json URL from
+          # 404-ing during the build window (which surfaces in the app as
+          # "Could not fetch a valid release JSON from the remote").
+          gh release edit "$TAG" --latest
