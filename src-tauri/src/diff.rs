@@ -220,18 +220,8 @@ fn diff_file(
             }
         }
 
-        // Both missing, previously synced → already synced delete
-        (None, None, Some(_)) => SyncAction::Skip,
-
-        // Both missing, never synced → nothing to do
-        (None, None, None) => SyncAction::Skip,
-
-        // Local exists, no remote, previously synced but no remote info
-        // This shouldn't normally happen, but upload to be safe
-        (Some(_), None, _) => SyncAction::Upload {
-            local_path,
-            remote_path,
-        },
+        // Both missing — either already synced delete or never existed
+        (None, None, _) => SyncAction::Skip,
     }
 }
 
@@ -268,7 +258,7 @@ fn is_remote_changed(remote: &RemoteFileInfo, known: &FileState) -> bool {
 
     // Fallback: compare by size
     if let (Some(remote_size), Some(known_size)) = (remote.size, known.remote_size) {
-        if remote_size as i64 != known_size {
+        if remote_size != known_size {
             return true;
         }
     }
@@ -301,7 +291,7 @@ mod tests {
             path: path.to_string(),
             etag: Some(etag.to_string()),
             mtime: Some(1000),
-            size: Some(size as u64),
+            size: Some(size),
         }
     }
 
@@ -319,6 +309,7 @@ mod tests {
             remote_exists: true,
             sync_status: "synced".to_string(),
             last_synced_hash: Some(hash.to_string()),
+            last_synced_mtime: Some(1000),
             last_synced_etag: Some(etag.to_string()),
             last_synced_at: Some("2026-01-01T00:00:00Z".to_string()),
             error_message: None,

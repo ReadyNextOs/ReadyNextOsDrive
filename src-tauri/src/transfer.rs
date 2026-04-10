@@ -97,11 +97,11 @@ impl WebDavTransfer {
             .map_err(|e| AppError::io(format!("Failed to read file {}: {}", local_path.display(), e)))?;
         let bytes_len = bytes.len() as u64;
 
-        // Ensure parent directory exists on remote
-        if let Some(parent) = Path::new(remote_path).parent() {
-            let parent_str = parent.to_string_lossy();
-            if !parent_str.is_empty() && parent_str != "." && parent_str != "/" {
-                self.mkcol(&parent_str).await.ok();
+        // Ensure parent directory (and all ancestors) exist on remote.
+        // WebDAV MKCOL is not recursive, so we create each segment in turn.
+        if let Some((parent, _)) = remote_path.trim_start_matches('/').rsplit_once('/') {
+            if !parent.is_empty() {
+                self.mkcol_recursive(parent).await.ok();
             }
         }
 
@@ -134,6 +134,11 @@ impl WebDavTransfer {
             }
         })
         .await;
+
+        // Apply bandwidth throttling after successful transfer
+        if result.is_ok() {
+            self.rate_limit(bytes_len, self.upload_limit_bps).await;
+        }
 
         result.map(|_| UploadResult {
             remote_path: remote_path.to_string(),
@@ -190,6 +195,9 @@ impl WebDavTransfer {
         tokio::fs::write(local_path, &bytes)
             .await
             .map_err(|e| AppError::io(format!("Failed to write file {}: {}", local_path.display(), e)))?;
+
+        // Apply bandwidth throttling after successful transfer
+        self.rate_limit(bytes_len, self.download_limit_bps).await;
 
         Ok(DownloadResult {
             local_path: local_path.to_string_lossy().to_string(),
@@ -304,6 +312,29 @@ impl WebDavTransfer {
             }
         })
         .await
+    }
+
+    /// Recursively create a directory tree on the remote.
+    /// For `folder/sub/deep`, creates `folder`, then `folder/sub`, then `folder/sub/deep`.
+    /// Ignores per-level failures (409 Conflict happens if parent missing) since the
+    /// sequential walk creates the missing parents on subsequent iterations.
+    pub async fn mkcol_recursive(&self, remote_path: &str) -> AppResult<()> {
+        let trimmed = remote_path.trim_start_matches('/').trim_end_matches('/');
+        if trimmed.is_empty() {
+            return Ok(());
+        }
+
+        let segments: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).collect();
+        let mut current = String::new();
+        for seg in segments {
+            if !current.is_empty() {
+                current.push('/');
+            }
+            current.push_str(seg);
+            // Best-effort: ignore errors on intermediate levels.
+            let _ = self.mkcol(&current).await;
+        }
+        Ok(())
     }
 }
 

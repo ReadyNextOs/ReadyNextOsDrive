@@ -20,6 +20,7 @@ pub struct FileState {
     pub remote_exists: bool,
     pub sync_status: String,
     pub last_synced_hash: Option<String>,
+    pub last_synced_mtime: Option<i64>,
     pub last_synced_etag: Option<String>,
     pub last_synced_at: Option<String>,
     pub error_message: Option<String>,
@@ -165,7 +166,7 @@ pub fn get_file_state(pool: &DbPool, path: &str, zone: &str) -> AppResult<Option
         .prepare(
             "SELECT path, sync_zone, local_hash, local_mtime, local_size, local_exists,
                     remote_etag, remote_mtime, remote_size, remote_exists,
-                    sync_status, last_synced_hash, last_synced_etag, last_synced_at,
+                    sync_status, last_synced_hash, last_synced_mtime, last_synced_etag, last_synced_at,
                     error_message, retry_count
              FROM file_state
              WHERE path = ?1 AND sync_zone = ?2",
@@ -187,10 +188,11 @@ pub fn get_file_state(pool: &DbPool, path: &str, zone: &str) -> AppResult<Option
                 remote_exists: row.get::<_, i64>(9)? != 0,
                 sync_status: row.get(10)?,
                 last_synced_hash: row.get(11)?,
-                last_synced_etag: row.get(12)?,
-                last_synced_at: row.get(13)?,
-                error_message: row.get(14)?,
-                retry_count: row.get(15)?,
+                last_synced_mtime: row.get(12)?,
+                last_synced_etag: row.get(13)?,
+                last_synced_at: row.get(14)?,
+                error_message: row.get(15)?,
+                retry_count: row.get(16)?,
             })
         })
         .optional()
@@ -208,9 +210,9 @@ pub fn upsert_file_state(pool: &DbPool, state: &FileState) -> AppResult<()> {
         "INSERT INTO file_state (
             path, sync_zone, local_hash, local_mtime, local_size, local_exists,
             remote_etag, remote_mtime, remote_size, remote_exists,
-            sync_status, last_synced_hash, last_synced_etag, last_synced_at,
+            sync_status, last_synced_hash, last_synced_mtime, last_synced_etag, last_synced_at,
             error_message, retry_count, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'))
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, datetime('now'))
         ON CONFLICT(path, sync_zone) DO UPDATE SET
             local_hash = excluded.local_hash,
             local_mtime = excluded.local_mtime,
@@ -222,6 +224,7 @@ pub fn upsert_file_state(pool: &DbPool, state: &FileState) -> AppResult<()> {
             remote_exists = excluded.remote_exists,
             sync_status = excluded.sync_status,
             last_synced_hash = excluded.last_synced_hash,
+            last_synced_mtime = excluded.last_synced_mtime,
             last_synced_etag = excluded.last_synced_etag,
             last_synced_at = excluded.last_synced_at,
             error_message = excluded.error_message,
@@ -240,6 +243,7 @@ pub fn upsert_file_state(pool: &DbPool, state: &FileState) -> AppResult<()> {
             state.remote_exists as i64,
             state.sync_status,
             state.last_synced_hash,
+            state.last_synced_mtime,
             state.last_synced_etag,
             state.last_synced_at,
             state.error_message,
@@ -274,7 +278,7 @@ pub fn list_files_by_zone(pool: &DbPool, zone: &str) -> AppResult<Vec<FileState>
         .prepare(
             "SELECT path, sync_zone, local_hash, local_mtime, local_size, local_exists,
                     remote_etag, remote_mtime, remote_size, remote_exists,
-                    sync_status, last_synced_hash, last_synced_etag, last_synced_at,
+                    sync_status, last_synced_hash, last_synced_mtime, last_synced_etag, last_synced_at,
                     error_message, retry_count
              FROM file_state
              WHERE sync_zone = ?1
@@ -297,10 +301,11 @@ pub fn list_files_by_zone(pool: &DbPool, zone: &str) -> AppResult<Vec<FileState>
                 remote_exists: row.get::<_, i64>(9)? != 0,
                 sync_status: row.get(10)?,
                 last_synced_hash: row.get(11)?,
-                last_synced_etag: row.get(12)?,
-                last_synced_at: row.get(13)?,
-                error_message: row.get(14)?,
-                retry_count: row.get(15)?,
+                last_synced_mtime: row.get(12)?,
+                last_synced_etag: row.get(13)?,
+                last_synced_at: row.get(14)?,
+                error_message: row.get(15)?,
+                retry_count: row.get(16)?,
             })
         })
         .map_err(|e| AppError::io(format!("Failed to list files by zone: {}", e)))?;
@@ -318,7 +323,7 @@ pub fn get_dirty_files(pool: &DbPool) -> AppResult<Vec<FileState>> {
         .prepare(
             "SELECT path, sync_zone, local_hash, local_mtime, local_size, local_exists,
                     remote_etag, remote_mtime, remote_size, remote_exists,
-                    sync_status, last_synced_hash, last_synced_etag, last_synced_at,
+                    sync_status, last_synced_hash, last_synced_mtime, last_synced_etag, last_synced_at,
                     error_message, retry_count
              FROM file_state
              WHERE sync_status NOT IN ('synced', 'unknown')
@@ -341,10 +346,11 @@ pub fn get_dirty_files(pool: &DbPool) -> AppResult<Vec<FileState>> {
                 remote_exists: row.get::<_, i64>(9)? != 0,
                 sync_status: row.get(10)?,
                 last_synced_hash: row.get(11)?,
-                last_synced_etag: row.get(12)?,
-                last_synced_at: row.get(13)?,
-                error_message: row.get(14)?,
-                retry_count: row.get(15)?,
+                last_synced_mtime: row.get(12)?,
+                last_synced_etag: row.get(13)?,
+                last_synced_at: row.get(14)?,
+                error_message: row.get(15)?,
+                retry_count: row.get(16)?,
             })
         })
         .map_err(|e| AppError::io(format!("Failed to query dirty files: {}", e)))?;

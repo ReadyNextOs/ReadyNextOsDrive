@@ -264,19 +264,31 @@ impl SyncEngine {
         // 1. Scan local files
         let mut local_files = scan_local_files(local_base)?;
 
-        // Apply selective sync filter (if configured)
+        // 2. Scan remote files
+        let mut remote_files = scan_remote_files(&transfer).await?;
+
+        // Apply selective sync filter to BOTH local and remote (if configured).
+        // A file is kept iff it lives inside any included folder.
         if !config.sync_include_paths.is_empty() {
-            local_files.retain(|f| {
-                config.sync_include_paths.iter().any(|include| {
-                    f.path.starts_with(include) || include.starts_with(&f.path)
+            let includes: Vec<String> = config
+                .sync_include_paths
+                .iter()
+                .map(|p| p.trim_matches('/').to_string())
+                .filter(|p| !p.is_empty())
+                .collect();
+
+            let keep = |path: &str| -> bool {
+                includes.iter().any(|inc| {
+                    path == inc || path.starts_with(&format!("{}/", inc))
                 })
-            });
+            };
+
+            local_files.retain(|f| keep(&f.path));
+            remote_files.retain(|f| keep(&f.path));
         }
         let local_files = local_files;
+        let remote_files = remote_files;
         log::debug!("Zone '{}': {} local files found", zone, local_files.len());
-
-        // 2. Scan remote files
-        let remote_files = scan_remote_files(&transfer).await?;
         log::debug!("Zone '{}': {} remote files found", zone, remote_files.len());
 
         // 3. Load known states from SQLite
@@ -414,6 +426,7 @@ impl SyncEngine {
                     remote_exists: true,
                     sync_status: "synced".to_string(),
                     last_synced_hash: Some(hash),
+                    last_synced_mtime: Some(mtime),
                     last_synced_etag: non_empty_str(&new_etag),
                     last_synced_at: Some(chrono::Utc::now().to_rfc3339()),
                     error_message: None,
@@ -462,6 +475,7 @@ impl SyncEngine {
                     remote_exists: true,
                     sync_status: "synced".to_string(),
                     last_synced_hash: Some(hash),
+                    last_synced_mtime: Some(mtime),
                     last_synced_etag: non_empty_str(&new_etag),
                     last_synced_at: Some(chrono::Utc::now().to_rfc3339()),
                     error_message: None,
@@ -498,10 +512,13 @@ impl SyncEngine {
                 remote_path,
                 conflict_type,
             } => {
+                // Compute debug string once — conflict_type will be moved into json! below.
+                let conflict_debug = format!("{:?}", conflict_type);
+
                 log::warn!(
-                    "Conflict '{}' ({:?}): auto-skipping (Phase 4 resolution pending)",
+                    "Conflict '{}' ({}): auto-skipping (Phase 4 resolution pending)",
                     rel_path,
-                    conflict_type
+                    conflict_debug
                 );
 
                 let _ = app.emit(
@@ -538,6 +555,7 @@ impl SyncEngine {
                     remote_exists: true,
                     sync_status: "conflict".to_string(),
                     last_synced_hash: None,
+                    last_synced_mtime: None,
                     last_synced_etag: None,
                     last_synced_at: None,
                     error_message: None,
@@ -545,17 +563,12 @@ impl SyncEngine {
                 });
                 let updated = FileState {
                     sync_status: "conflict".to_string(),
-                    error_message: Some(format!("Conflict: {:?}", conflict_type)),
+                    error_message: Some(format!("Conflict: {}", conflict_debug)),
                     ..base
                 };
                 db::upsert_file_state(db, &updated)?;
 
-                self.log_activity(
-                    "conflict",
-                    rel_path,
-                    "skipped",
-                    Some(format!("{:?}", conflict_type)),
-                );
+                self.log_activity("conflict", rel_path, "skipped", Some(conflict_debug));
                 Ok(0)
             }
 
@@ -775,11 +788,24 @@ fn non_empty_str(s: &str) -> Option<String> {
 
 /// Recursively scan remote WebDAV directory via PROPFIND.
 /// Returns flat list of RemoteFileInfo for files only.
+///
+/// Stack holds *relative* paths (e.g. "folder/sub"), not full hrefs. The server
+/// returns hrefs like "/dav/personal/folder/sub/"; we convert to relative via
+/// `relative_remote_path` before pushing to avoid URL-duplication bug (building
+/// `base_url + "/" + absolute_href` → double-prefix 404 loop).
 async fn scan_remote_files(transfer: &WebDavTransfer) -> AppResult<Vec<RemoteFileInfo>> {
-    let mut stack: Vec<String> = vec!["".to_string()];
+    use std::collections::HashSet;
+
+    let mut stack: Vec<String> = vec![String::new()]; // "" = root
+    let mut visited: HashSet<String> = HashSet::new();
     let mut files = Vec::new();
 
     while let Some(dir) = stack.pop() {
+        // Guard against cycles (e.g. server returns self-referential hrefs).
+        if !visited.insert(dir.clone()) {
+            continue;
+        }
+
         let entries = match transfer.propfind(&dir).await {
             Ok(e) => e,
             Err(e) => {
@@ -789,19 +815,23 @@ async fn scan_remote_files(transfer: &WebDavTransfer) -> AppResult<Vec<RemoteFil
         };
 
         for entry in entries {
+            let rel_path = relative_remote_path(&entry.path);
+
+            // Skip the directory itself (PROPFIND Depth:1 includes the queried resource).
+            if rel_path == dir {
+                continue;
+            }
+
+            // Skip dotfiles (anywhere in the path).
+            if rel_path.split('/').any(|c| c.starts_with('.')) {
+                continue;
+            }
+
             if entry.is_directory {
-                // Push subdirectory onto stack for iteration
-                let subdir = decode_webdav_href(&entry.path);
-                stack.push(subdir);
-            } else {
-                let rel_path = relative_remote_path(&entry.path);
-                if rel_path.is_empty() {
-                    continue;
+                if !rel_path.is_empty() {
+                    stack.push(rel_path);
                 }
-                // Skip dotfiles
-                if rel_path.split('/').any(|c| c.starts_with('.')) {
-                    continue;
-                }
+            } else if !rel_path.is_empty() {
                 files.push(RemoteFileInfo {
                     path: rel_path,
                     etag: entry.etag,
@@ -819,6 +849,7 @@ async fn scan_remote_files(transfer: &WebDavTransfer) -> AppResult<Vec<RemoteFil
 }
 
 /// Decode a WebDAV href to a plain path string (no URL encoding).
+#[allow(dead_code)]
 fn decode_webdav_href(href: &str) -> String {
     urlencoding::decode(href)
         .map(|c| c.into_owned())
@@ -914,6 +945,7 @@ fn record_file_error(db: &DbPool, path: &str, zone: &str, error: &str) -> AppRes
         remote_exists: false,
         sync_status: "error".to_string(),
         last_synced_hash: None,
+        last_synced_mtime: None,
         last_synced_etag: None,
         last_synced_at: None,
         error_message: None,
