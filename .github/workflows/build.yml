@@ -160,6 +160,28 @@ jobs:
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run squashfs-root "$APPIMAGE"
           rm -rf squashfs-root appimagetool
 
+      # --- Re-sign repacked AppImage ---
+      # `tauri build` signs the original AppImage and emits `<file>.sig`. The
+      # EGL/Wayland fix above repacks the AppImage, which changes its hash and
+      # invalidates that signature, so tauri-plugin-updater rejects updates
+      # with "The signature verification failed". Regenerate the .sig against
+      # the repacked file using the same signing key.
+      - name: Re-sign repacked AppImage
+        if: startsWith(matrix.platform, 'ubuntu')
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APPIMAGE="$(find src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name '*.AppImage' -print -quit)"
+          test -n "$APPIMAGE"
+          # Drop stale signature (signed the pre-repack hash)
+          rm -f "${APPIMAGE}.sig"
+          npx tauri signer sign "$APPIMAGE"
+          test -f "${APPIMAGE}.sig"
+          echo "Re-signed: ${APPIMAGE}.sig"
+
       # --- Create GitHub Release ---
       - name: Get app version
         id: version
